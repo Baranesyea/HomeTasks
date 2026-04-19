@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=11"></script>
+<script src="tasks.js?v=12"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -37,21 +37,24 @@
   <header class="mb-6 text-center">
     <h1 class="text-3xl sm:text-4xl font-black text-slate-900 mb-1">מְשִׂימוֹת הַבַּיִת</h1>
     <p id="date-line" class="text-base sm:text-lg text-slate-700 font-medium" aria-live="polite"></p>
-    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button> · <a href="admin.html" class="underline hover:text-slate-700">מנהל</a></p>
-    <p class="text-xs mt-1">
-      <span id="sync-status" class="text-slate-500">לא מוגדר ענן</span>
-      · <span id="sync-time" class="text-slate-400 text-[10px]"></span>
-    </p>
+    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00</p>
+    <div class="relative inline-block mt-2">
+      <button id="options-btn" class="text-xs text-slate-500 underline hover:text-slate-800 px-2 py-1">⋯ אפשרויות</button>
+      <div id="options-menu" class="hidden absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 z-30 min-w-[220px] text-right">
+        <button data-opt="sync" class="block w-full text-right py-2 px-3 hover:bg-slate-100 rounded-lg text-sm">🔄 רענן את הרשימה</button>
+        <button data-opt="reset" class="block w-full text-right py-2 px-3 hover:bg-slate-100 rounded-lg text-sm">↺ אפס סימוני היום</button>
+        <a href="admin.html" class="block w-full text-right py-2 px-3 hover:bg-slate-100 rounded-lg text-sm">⚙️ מנהל</a>
+        <button data-opt="cloud" class="block w-full text-right py-2 px-3 hover:bg-slate-100 rounded-lg text-sm">☁️ הגדרות ענן</button>
+        <div class="border-t mt-2 pt-2 px-3 text-[10px] text-slate-500" id="sync-status-line">
+          <span id="sync-status">…</span> <span id="sync-time" class="text-slate-400"></span>
+        </div>
+      </div>
+    </div>
   </header>
-
-  <!-- Floating refresh button — easy to tap on PWA where there's no browser refresh -->
-  <button id="sync-now-btn" aria-label="רענן" class="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center text-2xl active:scale-95 transition-transform">
-    🔄
-  </button>
 
   <div id="setup-toast" class="hidden fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold px-5 py-3 rounded-2xl shadow-lg z-50">✅ מסונכרן עם הענן</div>
 
-  <!-- Cloud setup form: shown when no gist config exists on this device -->
+  <!-- Cloud setup form: shown via Options menu (or auto-shown when needed) -->
   <div id="cloud-setup-card" class="hidden bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-6 max-w-2xl mx-auto">
     <div class="font-bold text-amber-900 mb-2">☁️ המכשיר הזה לא מחובר לענן</div>
     <p class="text-sm text-amber-800 mb-3">הזן את ה-Gist ID וה-Token כדי לקבל עדכונים מהמנהל. (אפשר להעתיק מעמוד המנהל במחשב.)</p>
@@ -333,11 +336,34 @@ function fireConfetti() {
   }
 }
 
-document.getElementById("manual-reset").addEventListener("click", () => {
-  if (!confirm("לאפס את כל הסימונים של היום?")) return;
-  state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
-  saveCheckedState(state);
-  render();
+// ===== Options dropdown menu =====
+const optionsBtn = document.getElementById("options-btn");
+const optionsMenu = document.getElementById("options-menu");
+
+function closeOptions() { optionsMenu.classList.add("hidden"); }
+function toggleOptions() { optionsMenu.classList.toggle("hidden"); }
+
+optionsBtn.addEventListener("click", (e) => { e.stopPropagation(); toggleOptions(); });
+document.addEventListener("click", (e) => {
+  if (!optionsMenu.contains(e.target) && e.target !== optionsBtn) closeOptions();
+});
+
+optionsMenu.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-opt]");
+  if (!btn) return;
+  const opt = btn.dataset.opt;
+  if (opt === "sync") {
+    syncFromGist(true);
+  } else if (opt === "reset") {
+    if (!confirm("לאפס את כל הסימונים של היום?")) return;
+    state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
+    saveCheckedState(state);
+    render();
+  } else if (opt === "cloud") {
+    document.getElementById("cloud-setup-card").classList.remove("hidden");
+    document.getElementById("cloud-setup-card").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  closeOptions();
 });
 
 // ===== Sync from admin (3 mechanisms, any one is enough) =====
@@ -407,8 +433,6 @@ function setSyncTime() {
   const d = new Date();
   el.textContent = `(${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")})`;
 }
-document.getElementById("sync-now-btn").addEventListener("click", () => syncFromGist(true));
-
 // Manual cloud setup form — visible when no config on this device
 function refreshCloudSetupVisibility() {
   const card = document.getElementById("cloud-setup-card");
