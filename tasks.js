@@ -77,19 +77,27 @@ const GIST_FILENAME = "tasks.json";
 const GIST_ID_KEY = "hometasks_gist_id";
 const GIST_TOKEN_KEY = "hometasks_gist_token";
 
+// Strip everything except printable ASCII — kills RTL marks, BOMs, NBSP, etc.
+// Headers and URLs must be ISO-8859-1, and pasted tokens often carry hidden Unicode.
+function sanitizeAscii(s) {
+  return (s || "").replace(/[^\x21-\x7E]/g, "");
+}
+
 function getGistConfig() {
   return {
-    gistId: localStorage.getItem(GIST_ID_KEY) || "",
-    token: localStorage.getItem(GIST_TOKEN_KEY) || "",
+    gistId: sanitizeAscii(localStorage.getItem(GIST_ID_KEY) || ""),
+    token: sanitizeAscii(localStorage.getItem(GIST_TOKEN_KEY) || ""),
   };
 }
 function setGistConfig({ gistId, token }) {
   if (gistId !== undefined) {
-    if (gistId) localStorage.setItem(GIST_ID_KEY, gistId);
+    const v = sanitizeAscii(gistId);
+    if (v) localStorage.setItem(GIST_ID_KEY, v);
     else localStorage.removeItem(GIST_ID_KEY);
   }
   if (token !== undefined) {
-    if (token) localStorage.setItem(GIST_TOKEN_KEY, token);
+    const v = sanitizeAscii(token);
+    if (v) localStorage.setItem(GIST_TOKEN_KEY, v);
     else localStorage.removeItem(GIST_TOKEN_KEY);
   }
 }
@@ -98,7 +106,9 @@ function hasGistConfig() {
   return !!(c.gistId && c.token);
 }
 
-async function fetchTasksFromGist({ gistId, token } = getGistConfig()) {
+async function fetchTasksFromGist(cfg = getGistConfig()) {
+  const gistId = sanitizeAscii(cfg.gistId);
+  const token = sanitizeAscii(cfg.token);
   if (!gistId) throw new Error("חסר Gist ID");
   const headers = { "Accept": "application/vnd.github+json" };
   if (token) headers["Authorization"] = `token ${token}`;
@@ -120,6 +130,8 @@ async function fetchTasksFromGist({ gistId, token } = getGistConfig()) {
 
 // Verify gist access without requiring the file to exist
 async function pingGist({ gistId, token }) {
+  gistId = sanitizeAscii(gistId);
+  token = sanitizeAscii(token);
   if (!gistId) throw new Error("חסר Gist ID");
   if (!token) throw new Error("חסר Token");
   const res = await fetch(`https://api.github.com/gists/${gistId}`, {
@@ -136,13 +148,15 @@ async function pingGist({ gistId, token }) {
 }
 
 async function saveTasksToGist(tasks, cfg = getGistConfig()) {
-  if (!cfg.gistId || !cfg.token) throw new Error("חסר Gist ID או Token");
+  const gistId = sanitizeAscii(cfg.gistId);
+  const token = sanitizeAscii(cfg.token);
+  if (!gistId || !token) throw new Error("חסר Gist ID או Token");
   const body = { files: { [GIST_FILENAME]: { content: JSON.stringify(tasks, null, 2) } } };
-  const res = await fetch(`https://api.github.com/gists/${cfg.gistId}`, {
+  const res = await fetch(`https://api.github.com/gists/${gistId}`, {
     method: "PATCH",
     headers: {
       "Accept": "application/vnd.github+json",
-      "Authorization": `token ${cfg.token}`,
+      "Authorization": `token ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
