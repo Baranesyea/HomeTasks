@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=9"></script>
+<script src="tasks.js?v=10"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -46,6 +46,18 @@
   </header>
 
   <div id="setup-toast" class="hidden fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold px-5 py-3 rounded-2xl shadow-lg z-50">✅ מסונכרן עם הענן</div>
+
+  <!-- Cloud setup form: shown when no gist config exists on this device -->
+  <div id="cloud-setup-card" class="hidden bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 mb-6 max-w-2xl mx-auto">
+    <div class="font-bold text-amber-900 mb-2">☁️ המכשיר הזה לא מחובר לענן</div>
+    <p class="text-sm text-amber-800 mb-3">הזן את ה-Gist ID וה-Token כדי לקבל עדכונים מהמנהל. (אפשר להעתיק מעמוד המנהל במחשב.)</p>
+    <div class="space-y-2">
+      <input id="setup-gist-id" placeholder="Gist ID" class="w-full p-2 border border-amber-300 rounded-lg font-mono text-sm" dir="ltr" />
+      <input id="setup-gist-token" type="password" placeholder="Token (ghp_...)" class="w-full p-2 border border-amber-300 rounded-lg font-mono text-sm" dir="ltr" />
+      <button id="setup-save-btn" class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-lg w-full">שמור והתחבר</button>
+      <div id="setup-msg" class="text-xs font-bold"></div>
+    </div>
+  </div>
 
   <div id="all-done" class="hidden all-done-banner rounded-3xl p-6 text-center mb-6 shadow-lg">
     <div class="text-4xl mb-2">🌟</div>
@@ -393,12 +405,36 @@ function setSyncTime() {
 }
 document.getElementById("sync-now-btn").addEventListener("click", () => syncFromGist(true));
 
+// Manual cloud setup form — visible when no config on this device
+function refreshCloudSetupVisibility() {
+  const card = document.getElementById("cloud-setup-card");
+  if (hasGistConfig()) card.classList.add("hidden");
+  else card.classList.remove("hidden");
+}
+
+document.getElementById("setup-save-btn").addEventListener("click", async () => {
+  const gistId = document.getElementById("setup-gist-id").value.trim();
+  const token = document.getElementById("setup-gist-token").value.trim();
+  const msg = document.getElementById("setup-msg");
+  if (!gistId || !token) { msg.textContent = "❌ חסר Gist ID או Token"; msg.className = "text-xs font-bold text-red-700"; return; }
+  msg.textContent = "⏳ בודק חיבור…"; msg.className = "text-xs font-bold text-amber-800";
+  try {
+    await pingGist({ gistId, token });
+    setGistConfig({ gistId, token });
+    msg.textContent = "✅ מחובר. טוען…"; msg.className = "text-xs font-bold text-emerald-700";
+    setTimeout(() => location.reload(), 600);
+  } catch (e) {
+    msg.textContent = "❌ " + e.message; msg.className = "text-xs font-bold text-red-700";
+  }
+});
+
 if (hasGistConfig()) {
   setSyncStatus("⏳ טוען מהענן…");
   syncFromGist();
   setInterval(syncFromGist, 30_000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncFromGist(); });
 }
+refreshCloudSetupVisibility();
 
 render();
 setInterval(checkDateReset, 60_000);
