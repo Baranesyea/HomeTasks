@@ -7,7 +7,8 @@
 <title>מנהל · משימות הבית</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=4"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="tasks.js?v=5"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
@@ -20,6 +21,14 @@
   .task-line:hover { background: #f1f5f9; }
   details > summary { list-style: none; cursor: pointer; }
   details > summary::-webkit-details-marker { display: none; }
+  /* Drag-and-drop */
+  .drag-handle { cursor: grab; touch-action: none; user-select: none; }
+  .drag-handle:active { cursor: grabbing; }
+  .sortable-ghost { opacity: 0.35; background: #dbeafe; }
+  .sortable-chosen { background: #eff6ff; }
+  .sortable-drag { background: white !important; box-shadow: 0 10px 25px rgba(0,0,0,0.15); border-radius: 8px; }
+  .section-list { min-height: 36px; }
+  .section-list.drop-target-empty { background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 8px; }
 </style>
 </head>
 <body class="min-h-screen niqqud pb-12">
@@ -162,22 +171,25 @@ function renderAdmin() {
     `;
     card.appendChild(header);
 
-    // Task list
+    // Task list (sortable, accepts cross-section drops)
     const list = document.createElement("div");
-    list.className = "divide-y divide-slate-100";
+    list.className = "section-list divide-y divide-slate-100";
+    list.dataset.sectionList = sectionKey;
     if (section.tasks.length === 0) {
-      list.innerHTML = `<div class="text-sm text-slate-400 italic py-2">אין משימות</div>`;
+      list.classList.add("drop-target-empty");
     }
-    section.tasks.forEach((task, idx) => {
+    section.tasks.forEach((task) => {
       const row = document.createElement("div");
-      row.className = "task-line flex items-center gap-2 py-2 px-1 rounded";
+      row.className = "task-line flex items-center gap-2 py-2 px-1 rounded bg-white";
+      row.dataset.taskRow = "1";
+      row.dataset.name = task.name;
+      row.dataset.type = task.type;
       row.innerHTML = `
+        <span class="drag-handle text-slate-400 text-xl px-1" title="גרור">≡</span>
         <span class="pill ${TYPE_PILL[task.type] || ''}">${TYPE_LABEL[task.type] || task.type}</span>
         <span class="flex-1 text-slate-900">${task.name}</span>
-        <button data-act="up" data-section="${sectionKey}" data-idx="${idx}" class="text-slate-400 hover:text-slate-700 px-2" title="העלה">▲</button>
-        <button data-act="down" data-section="${sectionKey}" data-idx="${idx}" class="text-slate-400 hover:text-slate-700 px-2" title="הורד">▼</button>
-        <button data-act="edit" data-section="${sectionKey}" data-idx="${idx}" class="text-blue-600 hover:text-blue-800 px-2 text-sm font-bold">ערוך</button>
-        <button data-act="delete" data-section="${sectionKey}" data-idx="${idx}" class="text-red-600 hover:text-red-800 px-2 text-sm font-bold">מחק</button>
+        <button data-act="edit" class="text-blue-600 hover:text-blue-800 px-2 text-sm font-bold">ערוך</button>
+        <button data-act="delete" class="text-red-600 hover:text-red-800 px-2 text-sm font-bold">מחק</button>
       `;
       list.appendChild(row);
     });
@@ -208,24 +220,9 @@ function renderAdmin() {
     const btn = e.target.closest("button[data-act]");
     if (!btn) return;
     const act = btn.dataset.act;
-    const sectionKey = btn.dataset.section;
-    const idx = btn.dataset.idx ? parseInt(btn.dataset.idx, 10) : null;
 
-    if (act === "delete") {
-      if (!confirm(`למחוק את "${TASKS[sectionKey].tasks[idx].name}"?`)) return;
-      TASKS[sectionKey].tasks.splice(idx, 1);
-      persist();
-    } else if (act === "up" && idx > 0) {
-      const t = TASKS[sectionKey].tasks;
-      [t[idx - 1], t[idx]] = [t[idx], t[idx - 1]];
-      persist();
-    } else if (act === "down" && idx < TASKS[sectionKey].tasks.length - 1) {
-      const t = TASKS[sectionKey].tasks;
-      [t[idx], t[idx + 1]] = [t[idx + 1], t[idx]];
-      persist();
-    } else if (act === "edit") {
-      openEditModal(sectionKey, idx);
-    } else if (act === "add") {
+    if (act === "add") {
+      const sectionKey = btn.dataset.section;
       const nameEl = root.querySelector(`input[data-role="add-name"][data-section="${sectionKey}"]`);
       const typeEl = root.querySelector(`select[data-role="add-type"][data-section="${sectionKey}"]`);
       const name = (nameEl.value || "").trim();
@@ -233,11 +230,60 @@ function renderAdmin() {
       TASKS[sectionKey].tasks.push({ name, type: typeEl.value });
       nameEl.value = "";
       persist();
+      return;
+    }
+
+    // edit/delete: derive section + index from the row's DOM position
+    const row = btn.closest("[data-task-row]");
+    if (!row) return;
+    const list = row.parentElement;
+    const sectionKey = list.dataset.sectionList;
+    const idx = Array.from(list.querySelectorAll("[data-task-row]")).indexOf(row);
+    if (idx < 0) return;
+
+    if (act === "delete") {
+      if (!confirm(`למחוק את "${TASKS[sectionKey].tasks[idx].name}"?`)) return;
+      TASKS[sectionKey].tasks.splice(idx, 1);
+      persist();
+    } else if (act === "edit") {
+      openEditModal(sectionKey, idx);
     }
   };
 
+  // Init drag-and-drop on every section list (shared group → cross-section drag)
+  root.querySelectorAll("[data-section-list]").forEach(listEl => {
+    new Sortable(listEl, {
+      group: "tasks",
+      animation: 150,
+      handle: ".drag-handle",
+      ghostClass: "sortable-ghost",
+      chosenClass: "sortable-chosen",
+      dragClass: "sortable-drag",
+      onEnd: rebuildFromDom,
+    });
+  });
+
   // Update JSON area
   document.getElementById("json-area").value = JSON.stringify(TASKS, null, 2);
+}
+
+// After a drag, rebuild TASKS from the new DOM order, then persist
+function rebuildFromDom() {
+  const newTasks = {};
+  for (const sectionKey of Object.keys(TASKS)) {
+    newTasks[sectionKey] = { ...TASKS[sectionKey], tasks: [] };
+  }
+  document.querySelectorAll("[data-section-list]").forEach(list => {
+    const sectionKey = list.dataset.sectionList;
+    list.querySelectorAll("[data-task-row]").forEach(row => {
+      newTasks[sectionKey].tasks.push({
+        name: row.dataset.name,
+        type: row.dataset.type,
+      });
+    });
+  });
+  TASKS = newTasks;
+  persist();
 }
 
 // BroadcastChannel for instant cross-tab sync to kids' UI

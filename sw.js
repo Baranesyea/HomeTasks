@@ -1,4 +1,4 @@
-const CACHE = "hometasks-v4";
+const CACHE = "hometasks-v5";
 const ASSETS = ["./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", e => {
