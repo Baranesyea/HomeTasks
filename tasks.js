@@ -72,6 +72,84 @@ function loadCheckedState() {
 function saveCheckedState(s) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
 function clearCheckedState() { localStorage.removeItem(STORAGE_KEY); }
 
+// ===== Gist sync (cross-device) =====
+const GIST_FILENAME = "tasks.json";
+const GIST_ID_KEY = "hometasks_gist_id";
+const GIST_TOKEN_KEY = "hometasks_gist_token";
+
+function getGistConfig() {
+  return {
+    gistId: localStorage.getItem(GIST_ID_KEY) || "",
+    token: localStorage.getItem(GIST_TOKEN_KEY) || "",
+  };
+}
+function setGistConfig({ gistId, token }) {
+  if (gistId !== undefined) {
+    if (gistId) localStorage.setItem(GIST_ID_KEY, gistId);
+    else localStorage.removeItem(GIST_ID_KEY);
+  }
+  if (token !== undefined) {
+    if (token) localStorage.setItem(GIST_TOKEN_KEY, token);
+    else localStorage.removeItem(GIST_TOKEN_KEY);
+  }
+}
+function hasGistConfig() {
+  const c = getGistConfig();
+  return !!(c.gistId && c.token);
+}
+
+async function fetchTasksFromGist({ gistId, token } = getGistConfig()) {
+  if (!gistId) throw new Error("חסר Gist ID");
+  const headers = { "Accept": "application/vnd.github+json" };
+  if (token) headers["Authorization"] = `token ${token}`;
+  const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers, cache: "no-store" });
+  if (!res.ok) throw new Error(`קריאה נכשלה: ${res.status}`);
+  const data = await res.json();
+  const file = data.files && data.files[GIST_FILENAME];
+  if (!file) throw new Error(`לא נמצא הקובץ ${GIST_FILENAME} בגיסט`);
+  const content = (file.content || "").trim();
+  if (!content || content === "{}") return null;
+  return JSON.parse(content);
+}
+
+async function saveTasksToGist(tasks, cfg = getGistConfig()) {
+  if (!cfg.gistId || !cfg.token) throw new Error("חסר Gist ID או Token");
+  const body = { files: { [GIST_FILENAME]: { content: JSON.stringify(tasks, null, 2) } } };
+  const res = await fetch(`https://api.github.com/gists/${cfg.gistId}`, {
+    method: "PATCH",
+    headers: {
+      "Accept": "application/vnd.github+json",
+      "Authorization": `token ${cfg.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`שמירה נכשלה: ${res.status} ${text.slice(0, 150)}`);
+  }
+}
+
+// Setup URL for cross-device handoff: encodes config in URL fragment (#setup=...)
+function consumeSetupUrl() {
+  if (!location.hash) return false;
+  const m = location.hash.match(/setup=([^&]+)/);
+  if (!m) return false;
+  try {
+    const cfg = JSON.parse(atob(decodeURIComponent(m[1])));
+    if (cfg.gistId) localStorage.setItem(GIST_ID_KEY, cfg.gistId);
+    if (cfg.token) localStorage.setItem(GIST_TOKEN_KEY, cfg.token);
+    history.replaceState(null, "", location.pathname + location.search);
+    return true;
+  } catch (e) { return false; }
+}
+
+function buildSetupUrl(baseUrl) {
+  const cfg = getGistConfig();
+  const encoded = encodeURIComponent(btoa(JSON.stringify({ gistId: cfg.gistId, token: cfg.token })));
+  return `${baseUrl}#setup=${encoded}`;
+}
+
 // ===== Date helpers =====
 function getEffectiveDate(d = new Date()) {
   const x = new Date(d);

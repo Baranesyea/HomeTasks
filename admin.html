@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="tasks.js?v=5"></script>
+<script src="tasks.js?v=6"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
@@ -57,9 +57,7 @@
 
     <div class="bg-white rounded-2xl shadow p-4 mb-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="text-sm text-slate-700 flex-1 min-w-[200px]">
-          🟡 שינויים נשמרים מקומית בדפדפן הזה. אם הילדים פתוחים בטאב/מכשיר אחר — לחץ "רענן ממשק ילדים" אחרי שמירה.
-        </div>
+        <div class="text-sm text-slate-700 flex-1 min-w-[200px]" id="sync-mode-line"></div>
         <div class="flex flex-wrap gap-2">
           <button id="force-refresh-btn" class="bg-blue-600 text-white font-bold text-sm px-4 py-2 rounded-lg shadow hover:bg-blue-700">
             🔄 רענן ממשק הילדים
@@ -70,6 +68,44 @@
       </div>
       <div id="status-line" class="hidden mt-2 text-xs text-emerald-700 font-bold"></div>
     </div>
+
+    <!-- Cloud sync settings -->
+    <details id="cloud-panel" class="bg-white rounded-2xl shadow p-4 mb-4">
+      <summary class="font-bold text-slate-800">☁️ סנכרון ענן (גיסט בגיטהאב) — <span id="cloud-summary" class="font-normal text-sm text-slate-500"></span></summary>
+      <div class="mt-3 space-y-3">
+        <p class="text-xs text-slate-600">סנכרון בין מכשירים דרך גיסט פרטי בגיטהאב. שמירה במנהל מעדכנת גם בענן, וממשק הילדים מושך משם כל 30 שניות.</p>
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">Gist ID</label>
+          <input id="gist-id-input" class="w-full p-2 border border-slate-300 rounded-lg font-mono text-sm" dir="ltr" placeholder="לדוגמה: a1b2c3d4e5f6..." />
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">Personal Access Token (PAT)</label>
+          <input id="gist-token-input" type="password" class="w-full p-2 border border-slate-300 rounded-lg font-mono text-sm" dir="ltr" placeholder="ghp_..." />
+          <p class="text-xs text-slate-500 mt-1">צור ב-<a href="https://github.com/settings/tokens/new" target="_blank" class="underline">github.com/settings/tokens/new</a> עם scope <code>gist</code> בלבד.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="cloud-test-save" class="bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg text-sm">בדוק ושמור</button>
+          <button id="cloud-pull" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg text-sm">משוך מהענן עכשיו</button>
+          <button id="cloud-push" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg text-sm">דחוף לענן עכשיו</button>
+          <button id="cloud-clear" class="bg-red-100 text-red-700 px-4 py-2 rounded-lg text-sm">נתק</button>
+        </div>
+        <div id="cloud-status" class="text-xs font-bold"></div>
+
+        <div class="border-t pt-3 mt-3">
+          <div class="font-bold text-sm text-slate-700 mb-2">📲 חיבור האייפד (או כל מכשיר אחר)</div>
+          <p class="text-xs text-slate-600 mb-2">לחץ ליצירת קישור. פתח אותו פעם אחת על האייפד — הוא יזכור את ההגדרות לבד.</p>
+          <button id="gen-setup-url" class="bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-sm">🔗 צור קישור התקנה לילדים</button>
+          <div id="setup-url-box" class="hidden mt-2">
+            <input id="setup-url-out" readonly class="w-full p-2 border border-slate-300 rounded-lg font-mono text-xs bg-slate-50" dir="ltr" />
+            <div class="flex gap-2 mt-2">
+              <button id="copy-setup-url" class="bg-slate-800 text-white px-3 py-1 rounded text-xs">העתק</button>
+              <a id="open-setup-url" href="#" target="_blank" class="bg-slate-200 text-slate-800 px-3 py-1 rounded text-xs">פתח כאן</a>
+            </div>
+            <p class="text-xs text-amber-700 mt-2">⚠️ הקישור מכיל את הטוקן. אל תשתף אותו פומבית.</p>
+          </div>
+        </div>
+      </div>
+    </details>
 
     <!-- Sections -->
     <div id="sections-admin"></div>
@@ -130,12 +166,7 @@ function showLogin() {
   document.getElementById("admin-app").classList.add("hidden");
   setTimeout(() => document.getElementById("pw-input").focus(), 50);
 }
-function showApp() {
-  document.getElementById("login-screen").classList.add("hidden");
-  document.getElementById("admin-app").classList.remove("hidden");
-  TASKS = loadTasks();
-  renderAdmin();
-}
+// showApp is defined at the bottom (handles cloud-pull-on-login)
 
 document.getElementById("login-btn").addEventListener("click", () => {
   const pw = document.getElementById("pw-input").value;
@@ -286,16 +317,26 @@ function rebuildFromDom() {
   persist();
 }
 
-// BroadcastChannel for instant cross-tab sync to kids' UI
+// BroadcastChannel for instant cross-tab sync to kids' UI (same browser only)
 let bc = null;
 try { bc = new BroadcastChannel("hometasks"); } catch (e) {}
 
-function persist() {
+async function persist() {
   saveTasks(TASKS);
-  // Don't wipe checked state — orphan keys are harmless, valid checks survive
   if (bc) bc.postMessage({ type: "tasks-updated" });
   renderAdmin();
-  flashStatus("✅ נשמר וסונכרן");
+
+  if (hasGistConfig()) {
+    flashStatus("⏳ שומר בענן…");
+    try {
+      await saveTasksToGist(TASKS);
+      flashStatus("☁️ נשמר וסונכרן לענן");
+    } catch (e) {
+      flashStatus("⚠️ נשמר מקומית — סנכרון לענן נכשל: " + e.message);
+    }
+  } else {
+    flashStatus("💾 נשמר מקומית בלבד (לא מוגדר ענן)");
+  }
 }
 
 function flashStatus(msg) {
@@ -303,7 +344,19 @@ function flashStatus(msg) {
   el.textContent = msg;
   el.classList.remove("hidden");
   clearTimeout(flashStatus._t);
-  flashStatus._t = setTimeout(() => el.classList.add("hidden"), 2500);
+  flashStatus._t = setTimeout(() => el.classList.add("hidden"), 3500);
+}
+
+function refreshSyncModeLine() {
+  const line = document.getElementById("sync-mode-line");
+  const summary = document.getElementById("cloud-summary");
+  if (hasGistConfig()) {
+    line.innerHTML = `☁️ <b>מצב ענן:</b> שינויים מסתנכרנים אוטומטית לכל המכשירים.`;
+    summary.textContent = "מחובר";
+  } else {
+    line.innerHTML = `🟡 <b>מצב מקומי:</b> שינויים נשמרים רק בדפדפן הזה. הגדר סנכרון ענן לסנכרון בין מכשירים.`;
+    summary.textContent = "לא מחובר";
+  }
 }
 
 // ===== Edit modal =====
@@ -379,7 +432,110 @@ document.getElementById("json-reload").addEventListener("click", () => {
   document.getElementById("json-area").value = JSON.stringify(TASKS, null, 2);
 });
 
+// ===== Cloud sync UI =====
+function setCloudStatus(msg, ok) {
+  const el = document.getElementById("cloud-status");
+  el.textContent = msg;
+  el.className = "text-xs font-bold " + (ok ? "text-emerald-700" : "text-red-700");
+}
+
+function loadCloudInputs() {
+  const cfg = getGistConfig();
+  document.getElementById("gist-id-input").value = cfg.gistId;
+  document.getElementById("gist-token-input").value = cfg.token;
+}
+
+document.getElementById("cloud-test-save").addEventListener("click", async () => {
+  const gistId = document.getElementById("gist-id-input").value.trim();
+  const token = document.getElementById("gist-token-input").value.trim();
+  if (!gistId || !token) { setCloudStatus("חסר Gist ID או Token", false); return; }
+  setCloudStatus("⏳ בודק חיבור…", true);
+  try {
+    await fetchTasksFromGist({ gistId, token });
+    setGistConfig({ gistId, token });
+    refreshSyncModeLine();
+    setCloudStatus("✅ חיבור תקין. ההגדרות נשמרו.", true);
+  } catch (e) {
+    setCloudStatus("❌ " + e.message, false);
+  }
+});
+
+document.getElementById("cloud-pull").addEventListener("click", async () => {
+  if (!hasGistConfig()) { setCloudStatus("הגדר Gist ID + Token קודם", false); return; }
+  setCloudStatus("⏳ מושך…", true);
+  try {
+    const remote = await fetchTasksFromGist();
+    if (!remote) { setCloudStatus("הגיסט ריק. דחוף קודם את המקומי לענן.", false); return; }
+    TASKS = remote;
+    saveTasks(TASKS);
+    if (bc) bc.postMessage({ type: "tasks-updated" });
+    renderAdmin();
+    setCloudStatus("✅ נמשך מהענן", true);
+  } catch (e) { setCloudStatus("❌ " + e.message, false); }
+});
+
+document.getElementById("cloud-push").addEventListener("click", async () => {
+  if (!hasGistConfig()) { setCloudStatus("הגדר Gist ID + Token קודם", false); return; }
+  setCloudStatus("⏳ דוחף…", true);
+  try {
+    await saveTasksToGist(TASKS);
+    setCloudStatus("✅ נדחף לענן", true);
+  } catch (e) { setCloudStatus("❌ " + e.message, false); }
+});
+
+document.getElementById("cloud-clear").addEventListener("click", () => {
+  if (!confirm("לנתק מסנכרון ענן? ההגדרות יימחקו רק מהמכשיר הזה.")) return;
+  setGistConfig({ gistId: "", token: "" });
+  loadCloudInputs();
+  refreshSyncModeLine();
+  setCloudStatus("נותק", true);
+});
+
+document.getElementById("gen-setup-url").addEventListener("click", () => {
+  if (!hasGistConfig()) { setCloudStatus("הגדר Gist ID + Token קודם", false); return; }
+  const baseUrl = location.href.replace(/\/[^/]*$/, "/index.html").split("#")[0].split("?")[0];
+  const url = buildSetupUrl(baseUrl);
+  document.getElementById("setup-url-out").value = url;
+  document.getElementById("open-setup-url").href = url;
+  document.getElementById("setup-url-box").classList.remove("hidden");
+});
+document.getElementById("copy-setup-url").addEventListener("click", async () => {
+  const url = document.getElementById("setup-url-out").value;
+  try { await navigator.clipboard.writeText(url); setCloudStatus("📋 הקישור הועתק", true); }
+  catch (e) {
+    document.getElementById("setup-url-out").select();
+    document.execCommand("copy");
+    setCloudStatus("📋 הקישור הועתק", true);
+  }
+});
+
 // ===== Boot =====
+function showApp() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("admin-app").classList.remove("hidden");
+  TASKS = loadTasks();
+  loadCloudInputs();
+  refreshSyncModeLine();
+  // Pull once on login if cloud is configured
+  if (hasGistConfig()) {
+    fetchTasksFromGist().then(remote => {
+      if (remote) {
+        TASKS = remote;
+        saveTasks(TASKS);
+        renderAdmin();
+        setCloudStatus("☁️ נטען מהענן", true);
+      } else {
+        renderAdmin();
+      }
+    }).catch(e => {
+      renderAdmin();
+      setCloudStatus("⚠️ קריאה מהענן נכשלה: " + e.message, false);
+    });
+  } else {
+    renderAdmin();
+  }
+}
+
 if (isLoggedIn()) showApp(); else showLogin();
 </script>
 </body>

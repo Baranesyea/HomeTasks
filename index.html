@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=5"></script>
+<script src="tasks.js?v=6"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -37,8 +37,10 @@
   <header class="mb-6 text-center">
     <h1 class="text-3xl sm:text-4xl font-black text-slate-900 mb-1">מְשִׂימוֹת הַבַּיִת</h1>
     <p id="date-line" class="text-base sm:text-lg text-slate-700 font-medium" aria-live="polite"></p>
-    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button> · <a href="admin.html" class="underline hover:text-slate-700">מנהל</a></p>
+    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button> · <a href="admin.html" class="underline hover:text-slate-700">מנהל</a> · <span id="sync-status" class="text-slate-400"></span></p>
   </header>
+
+  <div id="setup-toast" class="hidden fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold px-5 py-3 rounded-2xl shadow-lg z-50">✅ מסונכרן עם הענן</div>
 
   <div id="all-done" class="hidden all-done-banner rounded-3xl p-6 text-center mb-6 shadow-lg">
     <div class="text-4xl mb-2">🌟</div>
@@ -50,6 +52,14 @@
 </div>
 
 <script>
+// Pick up gist config from #setup=... if present (one-time handoff)
+const wasSetup = consumeSetupUrl();
+if (wasSetup) {
+  const t = document.getElementById("setup-toast");
+  t.classList.remove("hidden");
+  setTimeout(() => t.classList.add("hidden"), 3000);
+}
+
 let TASKS = loadTasks();
 
 function emptyChecked() {
@@ -339,6 +349,35 @@ window.addEventListener("storage", (e) => {
 
 // 3) Polling every 3s — last-resort fallback (catches anything the others miss)
 setInterval(reloadTasksAndRender, 3000);
+
+// ===== Cross-device cloud sync via Gist =====
+async function syncFromGist() {
+  if (!hasGistConfig()) return;
+  try {
+    const remote = await fetchTasksFromGist();
+    if (!remote) return;
+    const remoteJson = JSON.stringify(remote);
+    if (remoteJson === lastTasksJson) return;
+    saveTasks(remote);
+    lastTasksJson = remoteJson;
+    TASKS = remote;
+    render();
+    setSyncStatus("☁️ מסונכרן");
+  } catch (e) {
+    setSyncStatus("⚠️ סנכרון נכשל");
+    console.warn("Gist sync failed:", e);
+  }
+}
+function setSyncStatus(text) {
+  const el = document.getElementById("sync-status");
+  if (el) el.textContent = text;
+}
+if (hasGistConfig()) {
+  setSyncStatus("☁️ טוען...");
+  syncFromGist();
+  setInterval(syncFromGist, 30_000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncFromGist(); });
+}
 
 render();
 setInterval(checkDateReset, 60_000);
