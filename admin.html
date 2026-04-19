@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="tasks.js?v=6"></script>
+<script src="tasks.js?v=7"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
@@ -451,10 +451,16 @@ document.getElementById("cloud-test-save").addEventListener("click", async () =>
   if (!gistId || !token) { setCloudStatus("חסר Gist ID או Token", false); return; }
   setCloudStatus("⏳ בודק חיבור…", true);
   try {
-    await fetchTasksFromGist({ gistId, token });
+    const info = await pingGist({ gistId, token });
     setGistConfig({ gistId, token });
     refreshSyncModeLine();
-    setCloudStatus("✅ חיבור תקין. ההגדרות נשמרו.", true);
+    if (info.hasCanonical) {
+      setCloudStatus("✅ חיבור תקין. הקובץ tasks.json קיים — לחץ 'משוך מהענן' כדי לטעון, או 'דחוף לענן' כדי לדרוס.", true);
+    } else if (info.fileCount === 0) {
+      setCloudStatus("✅ חיבור תקין. הגיסט ריק — לחץ 'דחוף לענן עכשיו' כדי ליצור את הקובץ.", true);
+    } else {
+      setCloudStatus(`✅ חיבור תקין. נמצאו קבצים אחרים (${info.files.join(", ")}). לחץ 'דחוף לענן' כדי ליצור tasks.json לצידם.`, true);
+    }
   } catch (e) {
     setCloudStatus("❌ " + e.message, false);
   }

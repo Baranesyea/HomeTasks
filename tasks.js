@@ -105,11 +105,34 @@ async function fetchTasksFromGist({ gistId, token } = getGistConfig()) {
   const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers, cache: "no-store" });
   if (!res.ok) throw new Error(`קריאה נכשלה: ${res.status}`);
   const data = await res.json();
-  const file = data.files && data.files[GIST_FILENAME];
-  if (!file) throw new Error(`לא נמצא הקובץ ${GIST_FILENAME} בגיסט`);
+  // Prefer canonical filename, fall back to the first file in the gist
+  let file = data.files && data.files[GIST_FILENAME];
+  if (!file && data.files) {
+    const names = Object.keys(data.files);
+    if (names.length > 0) file = data.files[names[0]];
+  }
+  if (!file) return null; // empty gist — first push will create the file
   const content = (file.content || "").trim();
   if (!content || content === "{}") return null;
-  return JSON.parse(content);
+  try { return JSON.parse(content); }
+  catch (e) { throw new Error("תוכן הגיסט אינו JSON תקין"); }
+}
+
+// Verify gist access without requiring the file to exist
+async function pingGist({ gistId, token }) {
+  if (!gistId) throw new Error("חסר Gist ID");
+  if (!token) throw new Error("חסר Token");
+  const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+    headers: { "Accept": "application/vnd.github+json", "Authorization": `token ${token}` },
+    cache: "no-store",
+  });
+  if (res.status === 404) throw new Error("הגיסט לא נמצא (בדוק את ה-ID)");
+  if (res.status === 401 || res.status === 403) throw new Error("טוקן לא תקין או חסר scope של gist");
+  if (!res.ok) throw new Error(`גישה נכשלה: ${res.status}`);
+  const data = await res.json();
+  const hasCanonical = !!(data.files && data.files[GIST_FILENAME]);
+  const fileCount = Object.keys(data.files || {}).length;
+  return { hasCanonical, fileCount, files: Object.keys(data.files || {}) };
 }
 
 async function saveTasksToGist(tasks, cfg = getGistConfig()) {
