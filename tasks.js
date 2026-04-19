@@ -1,0 +1,158 @@
+// Shared constants & storage helpers for index.html and admin.html
+
+const KIDS = ["שִׁיָּה", "מִיכָאֵל", "יַעַר", "דִּין"];
+const GENERAL_LABEL = "מְשִׂימוֹת כְּלָלִיּוֹת";
+const ADMIN_PASSWORD = "1234"; // change here if needed
+
+// Task types:
+//   singular   = יחידנית — אחד מהילדים, ברוטציה יומית, ללא כפילות באותו יום
+//   collective = קולקטיבית — כל ילד עושה לעצמו
+//   general    = כללית — בטור הכלליות, מי שיעשה
+const DEFAULT_TASKS = {
+  morning: {
+    title: "מְשִׂימוֹת בּוֹקֶר",
+    icon: "🌅",
+    tasks: [
+      { name: "לְפַנּוֹת מֵדִיחַ", type: "singular" },
+      { name: "לְהַכְנִיס כֵּלִים לַמֵּדִיחַ", type: "singular" },
+      { name: "לְסַדֵּר מִטָּה", type: "collective" },
+      { name: "לְסַדֵּר חֲדַר שֵׁינָה", type: "general" },
+      { name: "לְסַדֵּר חֲדַר עֲבוֹדָה", type: "singular" },
+      { name: "לְסַדֵּר חֲדַר אַמְבַּטְיָה אַחֲרֵי הִתְאַרְגְּנוּת", type: "general" },
+      { name: "לְכַבּוֹת אוֹרוֹת", type: "singular" },
+      { name: "לְסַדֵּר תִּיק לְבֵית הַסֵּפֶר", type: "collective" },
+      { name: "לְמַלֵּא בַּקְבּוּק מַיִם", type: "collective" },
+    ],
+  },
+  free: {
+    title: "מְשִׂימוֹת חוֹפְשִׁיּוֹת",
+    icon: "☀️",
+    subtitle: "מָתַי שֶׁבָּא לָכֶם — רַק שֶׁיֵּעָשֶׂה הַיּוֹם",
+    tasks: [
+      { name: "לִקְרֹא", type: "collective" },
+      { name: "לְקַפֵּל 30 פְּרִיטֵי כְּבִיסָה", type: "collective" },
+      { name: "לְהָרִים דְּבָרִים מֵהָרִצְפָּה בַּמִּרְפֶּסֶת", type: "general" },
+    ],
+  },
+  evening: {
+    title: "מְשִׂימוֹת עֶרֶב",
+    icon: "🌙",
+    tasks: [
+      { name: "מִקְלַחַת", type: "collective" },
+      { name: "לְהָכִין בְּגָדִים לְמָחָר", type: "collective" },
+      { name: "לְפַנּוֹת מֵדִיחַ", type: "singular" },
+      { name: "לְהַכְנִיס כֵּלִים לַמֵּדִיחַ", type: "singular" },
+      { name: "לְסַדֵּר חֲדַר אַמְבַּטְיָה", type: "general" },
+      { name: "לְסַדֵּר שֵׁירוּתִים וְלִבְדֹּק שֶׁאֵין דְּבָרִים עַל הָרִצְפָּה", type: "general" },
+      { name: "לִכְתֹּב מָה בַּכְּרִיכִים לְמָחָר", type: "singular" },
+    ],
+  },
+};
+
+const STORAGE_KEY = "hometasks_v3";
+const TASKS_KEY = "hometasks_tasks_v3";
+
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(TASKS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_TASKS));
+}
+function saveTasks(t) { localStorage.setItem(TASKS_KEY, JSON.stringify(t)); }
+function resetTasksToDefault() { localStorage.removeItem(TASKS_KEY); }
+
+function loadCheckedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+function saveCheckedState(s) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+function clearCheckedState() { localStorage.removeItem(STORAGE_KEY); }
+
+// ===== Date helpers =====
+function getEffectiveDate(d = new Date()) {
+  const x = new Date(d);
+  if (x.getHours() < 6) x.setDate(x.getDate() - 1);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function dateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function getDayOfYear(d) {
+  const start = new Date(d.getFullYear(), 0, 0);
+  return Math.floor((d - start) / 86400000);
+}
+function formatHebrewDate(d) {
+  const days = ["רִאשׁוֹן","שֵׁנִי","שְׁלִישִׁי","רְבִיעִי","חֲמִישִׁי","שִׁישִּׁי","שַׁבָּת"];
+  const months = ["יָנוּאָר","פֶבְּרוּאָר","מֶרְץ","אַפְּרִיל","מַאי","יוּנִי","יוּלִי","אוֹגוּסְט","סֶפְּטֶמְבֶּר","אוֹקְטוֹבֶּר","נוֹבֶמְבֶּר","דֶּצֶמְבֶּר"];
+  return `יוֹם ${days[d.getDay()]}, ${d.getDate()} בְּ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ===== Assignment algorithm =====
+// Goals:
+//   1. Singular tasks rotate fairly through kids over days.
+//   2. The same task name never appears on two kids on the same day.
+//   3. The same kid does not get the same task two days in a row.
+//   4. Load is balanced — no kid gets piled with all the singular tasks.
+function hashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function buildAssignments(tasks, date) {
+  const out = {};
+  const dayNum = getDayOfYear(date);
+
+  // Init structure + collect singular slots in deterministic order
+  const singularSlots = [];
+  for (const sectionKey of Object.keys(tasks)) {
+    out[sectionKey] = { perKid: {}, general: [] };
+    KIDS.forEach(k => out[sectionKey].perKid[k] = []);
+    tasks[sectionKey].tasks.forEach((task, idx) => {
+      if (task.type === "collective") {
+        KIDS.forEach(k => out[sectionKey].perKid[k].push(task.name));
+      } else if (task.type === "general") {
+        out[sectionKey].general.push(task.name);
+      } else if (task.type === "singular") {
+        singularSlots.push({ sectionKey, idx, taskName: task.name });
+      }
+    });
+  }
+
+  // Greedy assignment with constraints
+  const kidLoad = {};
+  const kidNamesToday = {};
+  KIDS.forEach(k => { kidLoad[k] = 0; kidNamesToday[k] = new Set(); });
+
+  for (const slot of singularSlots) {
+    // Rotation base: shifts by 1 each day, ensuring same task moves to next kid daily
+    const baseOffset = (dayNum + hashStr(slot.taskName)) % KIDS.length;
+    const ranked = [];
+    for (let i = 0; i < KIDS.length; i++) ranked.push(KIDS[(baseOffset + i) % KIDS.length]);
+
+    // Eligible = those who don't have this task name today
+    const eligible = ranked.filter(k => !kidNamesToday[k].has(slot.taskName));
+    const pool = eligible.length > 0 ? eligible : ranked;
+
+    // Pick least-loaded; tiebreaker = ranking order (preserves rotation)
+    let picked = pool[0];
+    let pickedLoad = kidLoad[pool[0]];
+    for (const c of pool) {
+      if (kidLoad[c] < pickedLoad) { picked = c; pickedLoad = kidLoad[c]; }
+    }
+
+    out[slot.sectionKey].perKid[picked].push(slot.taskName);
+    kidLoad[picked]++;
+    kidNamesToday[picked].add(slot.taskName);
+  }
+
+  return out;
+}

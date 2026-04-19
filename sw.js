@@ -1,5 +1,5 @@
-const CACHE = "hometasks-v1";
-const ASSETS = ["./", "./index.html", "./manifest.json"];
+const CACHE = "hometasks-v3";
+const ASSETS = ["./", "./index.html", "./admin.html", "./tasks.js", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));

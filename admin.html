@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0f172a" />
+<title>מנהל · משימות הבית</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="tasks.js?v=3"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
+  html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
+  .niqqud { letter-spacing: 0.01em; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+  .pill-singular { background: #fef3c7; color: #92400e; }
+  .pill-collective { background: #dbeafe; color: #1e40af; }
+  .pill-general { background: #dcfce7; color: #166534; }
+  .task-line { transition: background 150ms ease; }
+  .task-line:hover { background: #f1f5f9; }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+</style>
+</head>
+<body class="min-h-screen niqqud pb-12">
+<div class="max-w-4xl mx-auto px-3 sm:px-6 pt-6">
+
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-black text-slate-900">⚙️ מנהל</h1>
+      <p class="text-sm text-slate-600">עריכת רשימת המשימות של משימות הבית</p>
+    </div>
+    <a href="index.html" class="text-sm text-slate-600 underline hover:text-slate-900">← חזרה לעמוד הראשי</a>
+  </header>
+
+  <!-- Login screen -->
+  <div id="login-screen" class="hidden bg-white rounded-2xl shadow p-6 max-w-sm mx-auto">
+    <h2 class="text-lg font-bold mb-3">סיסמת מנהל</h2>
+    <input id="pw-input" type="password" inputmode="numeric" autocomplete="off"
+           class="w-full p-3 border border-slate-300 rounded-lg text-center text-2xl tracking-widest"
+           placeholder="••••" />
+    <button id="login-btn" class="mt-3 w-full bg-slate-900 text-white font-bold py-3 rounded-lg">היכנס</button>
+    <p id="login-err" class="hidden mt-2 text-sm text-red-600 text-center">סיסמה שגויה</p>
+  </div>
+
+  <!-- Admin app -->
+  <div id="admin-app" class="hidden">
+
+    <div class="bg-white rounded-2xl shadow p-4 mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="text-sm text-slate-700">
+          🟡 שינויים נשמרים מקומית בדפדפן הזה (<code>localStorage</code>). בכל מכשיר צריך לעדכן בנפרד, או לעדכן את ברירת המחדל ב-<code>tasks.js</code> ולדחוף ל-Git.
+        </div>
+        <div class="flex gap-2">
+          <button id="reset-defaults" class="bg-slate-200 text-slate-800 text-sm px-3 py-2 rounded-lg">↺ שחזור ברירת מחדל</button>
+          <button id="logout-btn" class="bg-slate-100 text-slate-700 text-sm px-3 py-2 rounded-lg">יציאה</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sections -->
+    <div id="sections-admin"></div>
+
+    <!-- Raw JSON editor (advanced) -->
+    <details class="mt-6 bg-white rounded-2xl shadow p-4">
+      <summary class="font-bold text-slate-800">🔧 עריכת JSON ישירה (מתקדם)</summary>
+      <p class="text-xs text-slate-500 mt-1">סוגים: <code>singular</code> (יחידנית) · <code>collective</code> (קולקטיבית) · <code>general</code> (כללית).</p>
+      <textarea id="json-area" class="w-full h-72 mt-2 p-3 border rounded-lg font-mono text-xs" dir="ltr"></textarea>
+      <div class="flex gap-2 mt-2">
+        <button id="json-save" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm">שמור JSON</button>
+        <button id="json-reload" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg text-sm">טען מחדש</button>
+      </div>
+    </details>
+
+  </div>
+</div>
+
+<!-- Edit task modal -->
+<div id="edit-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full">
+    <h3 class="font-bold text-lg mb-3">עריכת משימה</h3>
+    <label class="block text-sm font-bold text-slate-700 mb-1">שם המשימה (עם ניקוד)</label>
+    <input id="edit-name" class="w-full p-3 border rounded-lg mb-3" />
+    <label class="block text-sm font-bold text-slate-700 mb-1">סוג</label>
+    <select id="edit-type" class="w-full p-3 border rounded-lg mb-3">
+      <option value="singular">יחידנית — אחד מהילדים מקבל ברוטציה</option>
+      <option value="collective">קולקטיבית — כל ילד עושה לעצמו</option>
+      <option value="general">כללית — מי שיעשה</option>
+    </select>
+    <label class="block text-sm font-bold text-slate-700 mb-1">סקשן</label>
+    <select id="edit-section" class="w-full p-3 border rounded-lg mb-4"></select>
+    <div class="flex gap-2 justify-end">
+      <button id="edit-cancel" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg">ביטול</button>
+      <button id="edit-save" class="bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg">שמור</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let TASKS = loadTasks();
+const SESSION_KEY = "hometasks_admin_auth";
+
+// ===== Auth =====
+function isLoggedIn() { return sessionStorage.getItem(SESSION_KEY) === "1"; }
+function login(pw) {
+  if (pw === ADMIN_PASSWORD) {
+    sessionStorage.setItem(SESSION_KEY, "1");
+    showApp();
+    return true;
+  }
+  return false;
+}
+function logout() { sessionStorage.removeItem(SESSION_KEY); showLogin(); }
+
+function showLogin() {
+  document.getElementById("login-screen").classList.remove("hidden");
+  document.getElementById("admin-app").classList.add("hidden");
+  setTimeout(() => document.getElementById("pw-input").focus(), 50);
+}
+function showApp() {
+  document.getElementById("login-screen").classList.add("hidden");
+  document.getElementById("admin-app").classList.remove("hidden");
+  TASKS = loadTasks();
+  renderAdmin();
+}
+
+document.getElementById("login-btn").addEventListener("click", () => {
+  const pw = document.getElementById("pw-input").value;
+  if (!login(pw)) {
+    document.getElementById("login-err").classList.remove("hidden");
+    document.getElementById("pw-input").value = "";
+  }
+});
+document.getElementById("pw-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("login-btn").click();
+});
+document.getElementById("logout-btn").addEventListener("click", logout);
+
+// ===== Admin render =====
+const TYPE_LABEL = { singular: "יחידנית", collective: "קולקטיבית", general: "כללית" };
+const TYPE_PILL  = { singular: "pill-singular", collective: "pill-collective", general: "pill-general" };
+
+function renderAdmin() {
+  const root = document.getElementById("sections-admin");
+  root.innerHTML = "";
+
+  for (const sectionKey of Object.keys(TASKS)) {
+    const section = TASKS[sectionKey];
+    const card = document.createElement("section");
+    card.className = "bg-white rounded-2xl shadow p-4 mb-4";
+
+    const header = document.createElement("div");
+    header.className = "flex items-center gap-3 mb-3";
+    header.innerHTML = `
+      <div class="text-2xl">${section.icon || ""}</div>
+      <h2 class="text-xl font-black text-slate-900">${section.title}</h2>
+      <span class="ms-auto text-xs text-slate-500">${section.tasks.length} משימות</span>
+    `;
+    card.appendChild(header);
+
+    // Task list
+    const list = document.createElement("div");
+    list.className = "divide-y divide-slate-100";
+    if (section.tasks.length === 0) {
+      list.innerHTML = `<div class="text-sm text-slate-400 italic py-2">אין משימות</div>`;
+    }
+    section.tasks.forEach((task, idx) => {
+      const row = document.createElement("div");
+      row.className = "task-line flex items-center gap-2 py-2 px-1 rounded";
+      row.innerHTML = `
+        <span class="pill ${TYPE_PILL[task.type] || ''}">${TYPE_LABEL[task.type] || task.type}</span>
+        <span class="flex-1 text-slate-900">${task.name}</span>
+        <button data-act="up" data-section="${sectionKey}" data-idx="${idx}" class="text-slate-400 hover:text-slate-700 px-2" title="העלה">▲</button>
+        <button data-act="down" data-section="${sectionKey}" data-idx="${idx}" class="text-slate-400 hover:text-slate-700 px-2" title="הורד">▼</button>
+        <button data-act="edit" data-section="${sectionKey}" data-idx="${idx}" class="text-blue-600 hover:text-blue-800 px-2 text-sm font-bold">ערוך</button>
+        <button data-act="delete" data-section="${sectionKey}" data-idx="${idx}" class="text-red-600 hover:text-red-800 px-2 text-sm font-bold">מחק</button>
+      `;
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+
+    // Add new task form
+    const addForm = document.createElement("div");
+    addForm.className = "mt-4 p-3 bg-slate-50 rounded-xl";
+    addForm.innerHTML = `
+      <div class="text-sm font-bold text-slate-700 mb-2">➕ הוסף משימה</div>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input data-section="${sectionKey}" data-role="add-name" class="flex-1 p-2 border border-slate-300 rounded-lg" placeholder="שם המשימה (עם ניקוד)" />
+        <select data-section="${sectionKey}" data-role="add-type" class="p-2 border border-slate-300 rounded-lg">
+          <option value="singular">יחידנית</option>
+          <option value="collective">קולקטיבית</option>
+          <option value="general">כללית</option>
+        </select>
+        <button data-act="add" data-section="${sectionKey}" class="bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg">הוסף</button>
+      </div>
+    `;
+    card.appendChild(addForm);
+
+    root.appendChild(card);
+  }
+
+  // Wire up buttons (event delegation)
+  root.onclick = (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const act = btn.dataset.act;
+    const sectionKey = btn.dataset.section;
+    const idx = btn.dataset.idx ? parseInt(btn.dataset.idx, 10) : null;
+
+    if (act === "delete") {
+      if (!confirm(`למחוק את "${TASKS[sectionKey].tasks[idx].name}"?`)) return;
+      TASKS[sectionKey].tasks.splice(idx, 1);
+      persist();
+    } else if (act === "up" && idx > 0) {
+      const t = TASKS[sectionKey].tasks;
+      [t[idx - 1], t[idx]] = [t[idx], t[idx - 1]];
+      persist();
+    } else if (act === "down" && idx < TASKS[sectionKey].tasks.length - 1) {
+      const t = TASKS[sectionKey].tasks;
+      [t[idx], t[idx + 1]] = [t[idx + 1], t[idx]];
+      persist();
+    } else if (act === "edit") {
+      openEditModal(sectionKey, idx);
+    } else if (act === "add") {
+      const nameEl = root.querySelector(`input[data-role="add-name"][data-section="${sectionKey}"]`);
+      const typeEl = root.querySelector(`select[data-role="add-type"][data-section="${sectionKey}"]`);
+      const name = (nameEl.value || "").trim();
+      if (!name) { nameEl.focus(); return; }
+      TASKS[sectionKey].tasks.push({ name, type: typeEl.value });
+      nameEl.value = "";
+      persist();
+    }
+  };
+
+  // Update JSON area
+  document.getElementById("json-area").value = JSON.stringify(TASKS, null, 2);
+}
+
+function persist() {
+  saveTasks(TASKS);
+  // Wipe today's checked state since assignment may change
+  clearCheckedState();
+  renderAdmin();
+}
+
+// ===== Edit modal =====
+let editTarget = null; // {sectionKey, idx}
+function openEditModal(sectionKey, idx) {
+  editTarget = { sectionKey, idx };
+  const task = TASKS[sectionKey].tasks[idx];
+  document.getElementById("edit-name").value = task.name;
+  document.getElementById("edit-type").value = task.type;
+  const sel = document.getElementById("edit-section");
+  sel.innerHTML = "";
+  for (const sk of Object.keys(TASKS)) {
+    const opt = document.createElement("option");
+    opt.value = sk;
+    opt.textContent = TASKS[sk].title;
+    if (sk === sectionKey) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  document.getElementById("edit-modal").classList.remove("hidden");
+}
+document.getElementById("edit-cancel").addEventListener("click", () => {
+  document.getElementById("edit-modal").classList.add("hidden");
+  editTarget = null;
+});
+document.getElementById("edit-save").addEventListener("click", () => {
+  if (!editTarget) return;
+  const newName = document.getElementById("edit-name").value.trim();
+  const newType = document.getElementById("edit-type").value;
+  const newSection = document.getElementById("edit-section").value;
+  if (!newName) return;
+
+  const { sectionKey, idx } = editTarget;
+  const task = TASKS[sectionKey].tasks[idx];
+
+  if (newSection !== sectionKey) {
+    TASKS[sectionKey].tasks.splice(idx, 1);
+    TASKS[newSection].tasks.push({ name: newName, type: newType });
+  } else {
+    task.name = newName;
+    task.type = newType;
+  }
+
+  document.getElementById("edit-modal").classList.add("hidden");
+  editTarget = null;
+  persist();
+});
+
+// ===== Reset & JSON =====
+document.getElementById("reset-defaults").addEventListener("click", () => {
+  if (!confirm("לחזור לרשימת ברירת המחדל? כל השינויים יימחקו.")) return;
+  resetTasksToDefault();
+  TASKS = loadTasks();
+  clearCheckedState();
+  renderAdmin();
+});
+document.getElementById("json-save").addEventListener("click", () => {
+  try {
+    const next = JSON.parse(document.getElementById("json-area").value);
+    TASKS = next;
+    persist();
+    alert("נשמר!");
+  } catch (e) {
+    alert("JSON לא תקין: " + e.message);
+  }
+});
+document.getElementById("json-reload").addEventListener("click", () => {
+  document.getElementById("json-area").value = JSON.stringify(TASKS, null, 2);
+});
+
+// ===== Boot =====
+if (isLoggedIn()) showApp(); else showLogin();
+</script>
+</body>
+</html>

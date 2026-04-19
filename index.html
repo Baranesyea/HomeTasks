@@ -9,6 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="tasks.js?v=3"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -27,171 +28,30 @@
   .badge-pop { animation: badgePop 500ms cubic-bezier(0.34, 1.56, 0.64, 1); }
   @keyframes badgePop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
   .all-done-banner { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border: 2px solid #16a34a; }
-  details > summary { list-style: none; cursor: pointer; }
-  details > summary::-webkit-details-marker { display: none; }
-  /* niqqud-friendly: a touch more letter spacing helps with vowel readability */
   .niqqud { letter-spacing: 0.01em; }
 </style>
 </head>
 <body class="min-h-screen pb-12 niqqud">
 <div class="max-w-7xl mx-auto px-3 sm:px-6 pt-6">
 
-  <!-- Header -->
   <header class="mb-6 text-center">
     <h1 class="text-3xl sm:text-4xl font-black text-slate-900 mb-1">מְשִׂימוֹת הַבַּיִת</h1>
     <p id="date-line" class="text-base sm:text-lg text-slate-700 font-medium" aria-live="polite"></p>
-    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button></p>
+    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button> · <a href="admin.html" class="underline hover:text-slate-700">מנהל</a></p>
   </header>
 
-  <!-- Banner when all done -->
   <div id="all-done" class="hidden all-done-banner rounded-3xl p-6 text-center mb-6 shadow-lg">
     <div class="text-4xl mb-2">🌟</div>
     <div class="text-2xl font-black text-slate-900">יוֹם מְעוּלֶּה! כֻּלָּם סִיְּימוּ הַכֹּל</div>
     <div class="text-slate-700 mt-1">תִּהְיוּ גֵּאִים בְּעַצְמְכֶם 💪</div>
   </div>
 
-  <!-- Sections render here -->
   <main id="sections"></main>
-
-  <!-- Parent edit panel (hidden, opens via 5 taps on date) -->
-  <details id="parent-panel" class="hidden mt-10 bg-slate-50 rounded-2xl shadow p-4 border border-slate-200">
-    <summary class="font-bold text-slate-800">⚙️ מצב הורה (עריכה)</summary>
-    <div class="mt-4 text-sm text-slate-700">
-      עריכה ישירה של רשימת המשימות (JSON). שמור ב-localStorage.
-      <p class="mt-2 text-xs text-slate-500">סוגי משימות: <code class="bg-white px-1 rounded">singular</code> = יחידנית (אדם אחד), <code class="bg-white px-1 rounded">collective</code> = קולקטיבית (כל ילד עושה לעצמו), <code class="bg-white px-1 rounded">general</code> = כללית (לא משנה מי יעשה).</p>
-      <textarea id="tasks-json" class="w-full h-72 mt-2 p-3 border rounded-lg font-mono text-xs" dir="ltr"></textarea>
-      <div class="flex gap-2 mt-2">
-        <button id="save-tasks" class="bg-emerald-600 text-white px-4 py-2 rounded-lg">שמור</button>
-        <button id="reset-tasks" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg">חזור לברירת מחדל</button>
-      </div>
-    </div>
-  </details>
 </div>
 
 <script>
-// ===== Constants =====
-const KIDS = ["שִׁיָּה", "מִיכָאֵל", "יַעַר", "דִּין"];
-const GENERAL_LABEL = "מְשִׂימוֹת כְּלָלִיּוֹת";
-
-// task types:
-//   singular   = יחידנית (one specific kid, rotates daily)
-//   collective = קולקטיבית (each kid does their own)
-//   general    = כללית (anyone, lives in the כלליות column)
-const DEFAULT_TASKS = {
-  morning: {
-    title: "מְשִׂימוֹת בּוֹקֶר",
-    icon: "🌅",
-    tasks: [
-      { name: "לְפַנּוֹת מֵדִיחַ", type: "singular" },
-      { name: "לְהַכְנִיס כֵּלִים לַמֵּדִיחַ", type: "singular" },
-      { name: "לְסַדֵּר מִטָּה", type: "collective" },
-      { name: "לְסַדֵּר חֲדַר שֵׁינָה", type: "collective" },
-      { name: "לְסַדֵּר חֲדַר עֲבוֹדָה", type: "singular" },
-      { name: "לְסַדֵּר חֲדַר אַמְבַּטְיָה אַחֲרֵי הִתְאַרְגְּנוּת", type: "singular" },
-      { name: "לְכַבּוֹת אוֹרוֹת", type: "singular" },
-      { name: "לְסַדֵּר תִּיק לְבֵית הַסֵּפֶר", type: "collective" },
-      { name: "לְמַלֵּא בַּקְבּוּק מַיִם", type: "collective" },
-    ],
-  },
-  free: {
-    title: "מְשִׂימוֹת חוֹפְשִׁיּוֹת",
-    icon: "☀️",
-    subtitle: "מָתַי שֶׁבָּא לָכֶם — רַק שֶׁיֵּעָשֶׂה הַיּוֹם",
-    tasks: [
-      { name: "לִקְרֹא", type: "collective" },
-      { name: "לְקַפֵּל 30 פְּרִיטֵי כְּבִיסָה", type: "singular" },
-      { name: "לְהָרִים דְּבָרִים מֵהָרִצְפָּה בַּמִּרְפֶּסֶת", type: "general" },
-    ],
-  },
-  evening: {
-    title: "מְשִׂימוֹת עֶרֶב",
-    icon: "🌙",
-    tasks: [
-      { name: "מִקְלַחַת", type: "collective" },
-      { name: "לְהָכִין בְּגָדִים לְמָחָר", type: "collective" },
-      { name: "לְפַנּוֹת מֵדִיחַ", type: "singular" },
-      { name: "לְהַכְנִיס כֵּלִים לַמֵּדִיחַ", type: "singular" },
-      { name: "לְסַדֵּר חֲדַר אַמְבַּטְיָה", type: "singular" },
-      { name: "לְסַדֵּר שֵׁירוּתִים וְלִבְדֹּק שֶׁאֵין דְּבָרִים עַל הָרִצְפָּה", type: "general" },
-      { name: "לִכְתֹּב מָה בַּכְּרִיכִים לְמָחָר", type: "singular" },
-    ],
-  },
-};
-
-// ===== Storage =====
-const STORAGE_KEY = "hometasks_v2";
-const TASKS_KEY = "hometasks_tasks_v2";
-
-function loadTasks() {
-  try {
-    const raw = localStorage.getItem(TASKS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return DEFAULT_TASKS;
-}
-function saveTasks(t) { localStorage.setItem(TASKS_KEY, JSON.stringify(t)); }
 let TASKS = loadTasks();
 
-// ===== Date logic =====
-// Day runs from 06:00. Before 06:00 we still show yesterday's list.
-function getEffectiveDate(d = new Date()) {
-  const x = new Date(d);
-  if (x.getHours() < 6) x.setDate(x.getDate() - 1);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-function dateKey(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function getDayOfYear(d) {
-  const start = new Date(d.getFullYear(), 0, 0);
-  return Math.floor((d - start) / 86400000);
-}
-function formatHebrewDate(d) {
-  const days = ["רִאשׁוֹן","שֵׁנִי","שְׁלִישִׁי","רְבִיעִי","חֲמִישִׁי","שִׁישִּׁי","שַׁבָּת"];
-  const months = ["יָנוּאָר","פֶבְּרוּאָר","מֶרְץ","אַפְּרִיל","מַאי","יוּנִי","יוּלִי","אוֹגוּסְט","סֶפְּטֶמְבֶּר","אוֹקְטוֹבֶּר","נוֹבֶמְבֶּר","דֶּצֶמְבֶּר"];
-  return `יוֹם ${days[d.getDay()]}, ${d.getDate()} בְּ${months[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-// ===== Assignment logic =====
-function getSingularAssignee(sectionKey, taskIndex, date) {
-  const dayNum = getDayOfYear(date);
-  const sectionHash = { morning: 0, free: 1, evening: 2 }[sectionKey] || 0;
-  const offset = (dayNum + taskIndex + sectionHash * 7) % KIDS.length;
-  return KIDS[offset];
-}
-
-function buildAssignments(date) {
-  const out = {};
-  for (const sectionKey of Object.keys(TASKS)) {
-    const section = TASKS[sectionKey];
-    const perKid = {};
-    KIDS.forEach(k => perKid[k] = []);
-    const general = [];
-    section.tasks.forEach((task, idx) => {
-      if (task.type === "collective") {
-        KIDS.forEach(k => perKid[k].push(task.name));
-      } else if (task.type === "singular") {
-        const kid = getSingularAssignee(sectionKey, idx, date);
-        perKid[kid].push(task.name);
-      } else if (task.type === "general") {
-        general.push(task.name);
-      }
-    });
-    out[sectionKey] = { perKid, general };
-  }
-  return out;
-}
-
-// ===== State =====
-function loadState() {
-  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
-  return null;
-}
-function saveState(s) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
 function emptyChecked() {
   const out = {};
   for (const k of Object.keys(TASKS)) {
@@ -203,10 +63,10 @@ function emptyChecked() {
 
 let state = (() => {
   const today = dateKey(getEffectiveDate());
-  const existing = loadState();
+  const existing = loadCheckedState();
   if (existing && existing.date === today) return existing;
   const fresh = { date: today, checked: emptyChecked() };
-  saveState(fresh);
+  saveCheckedState(fresh);
   return fresh;
 })();
 
@@ -214,18 +74,17 @@ function checkDateReset() {
   const today = dateKey(getEffectiveDate());
   if (state.date !== today) {
     state = { date: today, checked: emptyChecked() };
-    saveState(state);
+    saveCheckedState(state);
     render();
     return true;
   }
   return false;
 }
 
-// ===== Rendering =====
 function render() {
   const date = getEffectiveDate();
   document.getElementById("date-line").textContent = formatHebrewDate(date);
-  const assignments = buildAssignments(date);
+  const assignments = buildAssignments(TASKS, date);
   const root = document.getElementById("sections");
   root.innerHTML = "";
 
@@ -240,7 +99,7 @@ function render() {
     const header = document.createElement("div");
     header.className = "flex items-center gap-3 mb-4";
     header.innerHTML = `
-      <div class="text-3xl">${section.icon}</div>
+      <div class="text-3xl">${section.icon || ""}</div>
       <div class="min-w-0">
         <h2 class="text-xl sm:text-2xl font-black text-slate-900">${section.title}</h2>
         ${section.subtitle ? `<p class="text-sm text-slate-600">${section.subtitle}</p>` : ""}
@@ -255,22 +114,15 @@ function render() {
 
     KIDS.forEach(kid => {
       grid.appendChild(buildColumn({
-        title: kid,
-        kid,
-        scope: "kids",
-        sectionKey,
+        title: kid, kid, scope: "kids", sectionKey,
         items: data.perKid[kid],
       }));
     });
 
     if (hasGeneral) {
       grid.appendChild(buildColumn({
-        title: GENERAL_LABEL,
-        kid: null,
-        scope: "general",
-        sectionKey,
-        items: data.general,
-        isGeneral: true,
+        title: GENERAL_LABEL, kid: null, scope: "general", sectionKey,
+        items: data.general, isGeneral: true,
       }));
     }
 
@@ -332,19 +184,19 @@ function isChecked(sectionKey, scope, kid, taskName) {
 }
 
 function onToggle(sectionKey, scope, kid, taskName, val, row) {
+  if (!state.checked[sectionKey]) state.checked[sectionKey] = { kids: {}, general: {} };
   if (scope === "kids") {
     state.checked[sectionKey].kids[kid] = state.checked[sectionKey].kids[kid] || {};
     state.checked[sectionKey].kids[kid][taskName] = val;
   } else {
     state.checked[sectionKey].general[taskName] = val;
   }
-  saveState(state);
+  saveCheckedState(state);
   row.classList.toggle("checked", val);
   if (val) playPop();
   updateBadges();
 }
 
-// ===== Completion =====
 function isKidDone(sectionKey, kid, assignments) {
   const tasks = assignments[sectionKey].perKid[kid];
   if (tasks.length === 0) return true;
@@ -361,7 +213,7 @@ function isSectionDone(sectionKey, assignments) {
 
 function updateBadges() {
   const date = getEffectiveDate();
-  const assignments = buildAssignments(date);
+  const assignments = buildAssignments(TASKS, date);
   let allDone = true;
 
   for (const sectionKey of Object.keys(TASKS)) {
@@ -381,7 +233,6 @@ function updateBadges() {
       ? `<div class="badge-pop bg-emerald-500 text-white text-sm font-bold px-3 py-1 rounded-full">✅ הוּשְׁלַם!</div>`
       : "";
 
-    // kid columns
     KIDS.forEach(kid => {
       const card = sec.querySelector(`[data-kid="${kid}"]`);
       if (!card) return;
@@ -395,7 +246,6 @@ function updateBadges() {
       badge.innerHTML = done ? `<div class="badge-pop text-2xl">✅</div>` : "";
     });
 
-    // general column
     const gen = sec.querySelector('[data-general="1"]');
     if (gen) {
       const done = isGeneralDone(sectionKey, assignments);
@@ -420,7 +270,6 @@ function updateBadges() {
   }
 }
 
-// ===== Sound =====
 let audioCtx = null;
 function playPop() {
   try {
@@ -438,7 +287,6 @@ function playPop() {
   } catch (e) {}
 }
 
-// ===== Confetti =====
 function fireConfetti() {
   const colors = ["#0f172a", "#475569", "#16a34a", "#94a3b8", "#facc15", "#0ea5e9"];
   for (let i = 0; i < 80; i++) {
@@ -454,54 +302,26 @@ function fireConfetti() {
   }
 }
 
-// ===== Parent edit (5 taps on date) =====
-let dateTaps = 0, dateTapTimer = null;
-document.getElementById("date-line").addEventListener("click", () => {
-  dateTaps++;
-  clearTimeout(dateTapTimer);
-  dateTapTimer = setTimeout(() => dateTaps = 0, 1500);
-  if (dateTaps >= 5) {
-    dateTaps = 0;
-    const panel = document.getElementById("parent-panel");
-    panel.classList.toggle("hidden");
-    if (!panel.classList.contains("hidden")) {
-      panel.open = true;
-      document.getElementById("tasks-json").value = JSON.stringify(TASKS, null, 2);
-    }
-  }
-});
-document.getElementById("save-tasks").addEventListener("click", () => {
-  try {
-    const next = JSON.parse(document.getElementById("tasks-json").value);
-    TASKS = next;
-    saveTasks(next);
-    state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
-    saveState(state);
-    render();
-    alert("נשמר!");
-  } catch (e) {
-    alert("JSON לא תקין: " + e.message);
-  }
-});
-document.getElementById("reset-tasks").addEventListener("click", () => {
-  if (!confirm("לחזור לרשימת ברירת המחדל?")) return;
-  localStorage.removeItem(TASKS_KEY);
-  TASKS = DEFAULT_TASKS;
-  state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
-  saveState(state);
-  render();
-  document.getElementById("tasks-json").value = JSON.stringify(TASKS, null, 2);
-});
 document.getElementById("manual-reset").addEventListener("click", () => {
   if (!confirm("לאפס את כל הסימונים של היום?")) return;
   state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
-  saveState(state);
+  saveCheckedState(state);
   render();
 });
 
-// ===== Boot =====
+// Reload TASKS when admin saves changes (works across same-origin tabs/storage events)
+window.addEventListener("storage", (e) => {
+  if (e.key === TASKS_KEY) {
+    TASKS = loadTasks();
+    state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
+    saveCheckedState(state);
+    render();
+  }
+});
+
 render();
 setInterval(checkDateReset, 60_000);
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
