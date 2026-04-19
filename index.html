@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0f172a" />
-<title>משימות הבית - ברונשטיין</title>
+<title>מְשִׂימוֹת הַבַּיִת</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
@@ -12,53 +12,54 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
-  body { background: #f8fafc; color: #0f172a; }
-  .kid-card { transition: background 250ms ease, border-color 250ms ease, transform 200ms ease; }
-  .kid-card.done { animation: cardWin 600ms ease; }
+  body { background: #ffffff; color: #0f172a; }
+  .col-card { transition: background 250ms ease, border-color 250ms ease, transform 200ms ease; }
+  .col-card.done { animation: cardWin 600ms ease; }
   @keyframes cardWin { 0% { transform: scale(1); } 50% { transform: scale(1.04); } 100% { transform: scale(1); } }
   .section-done { animation: sectionPulse 1.4s ease-in-out infinite; }
   @keyframes sectionPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35); } 50% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); } }
   .task-row { user-select: none; }
-  .task-row input[type="checkbox"] { width: 28px; height: 28px; cursor: pointer; accent-color: #16a34a; }
-  .task-row label { cursor: pointer; flex: 1; font-size: 1.05rem; line-height: 1.4; }
-  .task-row.checked label { text-decoration: line-through; opacity: 0.5; }
+  .task-row input[type="checkbox"] { width: 30px; height: 30px; cursor: pointer; accent-color: #16a34a; flex-shrink: 0; }
+  .task-row label { cursor: pointer; flex: 1; font-size: 1.1rem; line-height: 1.7; }
+  .task-row.checked label { text-decoration: line-through; opacity: 0.45; }
   .confetti-piece { position: fixed; width: 10px; height: 14px; top: -20px; opacity: 0.9; z-index: 9999; pointer-events: none; }
   @keyframes confettiFall { to { transform: translateY(110vh) rotate(720deg); opacity: 0; } }
   .badge-pop { animation: badgePop 500ms cubic-bezier(0.34, 1.56, 0.64, 1); }
   @keyframes badgePop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
-  .all-done-banner { background: linear-gradient(135deg, #fef3c7, #fde68a, #fcd34d); }
-  /* parent edit mode */
-  .editing { outline: 2px dashed #f59e0b; outline-offset: 4px; }
+  .all-done-banner { background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border: 2px solid #16a34a; }
   details > summary { list-style: none; cursor: pointer; }
   details > summary::-webkit-details-marker { display: none; }
+  /* niqqud-friendly: a touch more letter spacing helps with vowel readability */
+  .niqqud { letter-spacing: 0.01em; }
 </style>
 </head>
-<body class="min-h-screen pb-12">
-<div class="max-w-6xl mx-auto px-3 sm:px-6 pt-6">
+<body class="min-h-screen pb-12 niqqud">
+<div class="max-w-7xl mx-auto px-3 sm:px-6 pt-6">
 
   <!-- Header -->
   <header class="mb-6 text-center">
-    <h1 class="text-3xl sm:text-4xl font-black text-slate-900 mb-1">משימות הבית</h1>
-    <p id="date-line" class="text-base sm:text-lg text-slate-600 font-medium" aria-live="polite"></p>
-    <p class="text-xs text-slate-400 mt-1">רשימה חדשה נוצרת כל בוקר ב-06:00 · <button id="manual-reset" class="underline hover:text-slate-600">איפוס ידני</button></p>
+    <h1 class="text-3xl sm:text-4xl font-black text-slate-900 mb-1">מְשִׂימוֹת הַבַּיִת</h1>
+    <p id="date-line" class="text-base sm:text-lg text-slate-700 font-medium" aria-live="polite"></p>
+    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button></p>
   </header>
 
   <!-- Banner when all done -->
   <div id="all-done" class="hidden all-done-banner rounded-3xl p-6 text-center mb-6 shadow-lg">
     <div class="text-4xl mb-2">🌟</div>
-    <div class="text-2xl font-black text-amber-900">יום מעולה! כולם סיימו הכל</div>
-    <div class="text-amber-800 mt-1">תהיו גאים בעצמכם 💪</div>
+    <div class="text-2xl font-black text-slate-900">יוֹם מְעוּלֶּה! כֻּלָּם סִיְּימוּ הַכֹּל</div>
+    <div class="text-slate-700 mt-1">תִּהְיוּ גֵּאִים בְּעַצְמְכֶם 💪</div>
   </div>
 
   <!-- Sections render here -->
   <main id="sections"></main>
 
   <!-- Parent edit panel (hidden, opens via 5 taps on date) -->
-  <details id="parent-panel" class="hidden mt-10 bg-white rounded-2xl shadow p-4">
-    <summary class="font-bold text-slate-700">⚙️ מצב הורה (עריכה)</summary>
-    <div class="mt-4 text-sm text-slate-600">
+  <details id="parent-panel" class="hidden mt-10 bg-slate-50 rounded-2xl shadow p-4 border border-slate-200">
+    <summary class="font-bold text-slate-800">⚙️ מצב הורה (עריכה)</summary>
+    <div class="mt-4 text-sm text-slate-700">
       עריכה ישירה של רשימת המשימות (JSON). שמור ב-localStorage.
-      <textarea id="tasks-json" class="w-full h-64 mt-2 p-3 border rounded-lg font-mono text-xs" dir="ltr"></textarea>
+      <p class="mt-2 text-xs text-slate-500">סוגי משימות: <code class="bg-white px-1 rounded">singular</code> = יחידנית (אדם אחד), <code class="bg-white px-1 rounded">collective</code> = קולקטיבית (כל ילד עושה לעצמו), <code class="bg-white px-1 rounded">general</code> = כללית (לא משנה מי יעשה).</p>
+      <textarea id="tasks-json" class="w-full h-72 mt-2 p-3 border rounded-lg font-mono text-xs" dir="ltr"></textarea>
       <div class="flex gap-2 mt-2">
         <button id="save-tasks" class="bg-emerald-600 text-white px-4 py-2 rounded-lg">שמור</button>
         <button id="reset-tasks" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg">חזור לברירת מחדל</button>
@@ -69,60 +70,57 @@
 
 <script>
 // ===== Constants =====
-const KIDS = ["שיה", "מיכאל", "יער", "דין"];
+const KIDS = ["שִׁיָּה", "מִיכָאֵל", "יַעַר", "דִּין"];
+const GENERAL_LABEL = "מְשִׂימוֹת כְּלָלִיּוֹת";
 
-const KID_COLORS = {
-  "שיה":   { bg: "bg-blue-50",   border: "border-blue-300",   text: "text-blue-900",   accent: "bg-blue-500"   },
-  "מיכאל": { bg: "bg-purple-50", border: "border-purple-300", text: "text-purple-900", accent: "bg-purple-500" },
-  "יער":   { bg: "bg-teal-50",   border: "border-teal-300",   text: "text-teal-900",   accent: "bg-teal-500"   },
-  "דין":   { bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-900", accent: "bg-orange-500" },
-};
-
-// task types: "rotating" (one kid per day, rotates), "personal" (each kid does own), "general" (everyone together)
+// task types:
+//   singular   = יחידנית (one specific kid, rotates daily)
+//   collective = קולקטיבית (each kid does their own)
+//   general    = כללית (anyone, lives in the כלליות column)
 const DEFAULT_TASKS = {
   morning: {
-    title: "משימות בוקר",
+    title: "מְשִׂימוֹת בּוֹקֶר",
     icon: "🌅",
     tasks: [
-      { name: "לפנות מדיח", type: "rotating" },
-      { name: "להכניס כלים למדיח", type: "rotating" },
-      { name: "לסדר מיטה", type: "personal" },
-      { name: "לסדר חדר שינה", type: "personal" },
-      { name: "לסדר חדר עבודה", type: "rotating" },
-      { name: "לסדר חדר אמבטיה אחרי התארגנות", type: "rotating" },
-      { name: "לכבות אורות", type: "rotating" },
-      { name: "לסדר תיק לבית הספר", type: "personal" },
-      { name: "למלא בקבוק מים", type: "personal" },
-    ],
-  },
-  evening: {
-    title: "משימות ערב",
-    icon: "🌙",
-    tasks: [
-      { name: "מקלחת", type: "personal" },
-      { name: "להכין בגדים למחר", type: "personal" },
-      { name: "לפנות מדיח", type: "rotating" },
-      { name: "להכניס כלים למדיח", type: "rotating" },
-      { name: "לסדר חדר אמבטיה", type: "rotating" },
-      { name: "לסדר שירותים ולבדוק שאין דברים על הרצפה", type: "general" },
-      { name: "לכתוב מה בכריכים למחר", type: "rotating" },
+      { name: "לְפַנּוֹת מֵדִיחַ", type: "singular" },
+      { name: "לְהַכְנִיס כֵּלִים לַמֵּדִיחַ", type: "singular" },
+      { name: "לְסַדֵּר מִטָּה", type: "collective" },
+      { name: "לְסַדֵּר חֲדַר שֵׁינָה", type: "collective" },
+      { name: "לְסַדֵּר חֲדַר עֲבוֹדָה", type: "singular" },
+      { name: "לְסַדֵּר חֲדַר אַמְבַּטְיָה אַחֲרֵי הִתְאַרְגְּנוּת", type: "singular" },
+      { name: "לְכַבּוֹת אוֹרוֹת", type: "singular" },
+      { name: "לְסַדֵּר תִּיק לְבֵית הַסֵּפֶר", type: "collective" },
+      { name: "לְמַלֵּא בַּקְבּוּק מַיִם", type: "collective" },
     ],
   },
   free: {
-    title: "משימות חופשיות",
+    title: "מְשִׂימוֹת חוֹפְשִׁיּוֹת",
     icon: "☀️",
-    subtitle: "מתי שבא לכם - רק שייעשה היום",
+    subtitle: "מָתַי שֶׁבָּא לָכֶם — רַק שֶׁיֵּעָשֶׂה הַיּוֹם",
     tasks: [
-      { name: "לקרוא", type: "personal" },
-      { name: "להרים דברים מהרצפה במרפסת", type: "general" },
-      { name: "לקפל 30 פריטי כביסה", type: "rotating" },
+      { name: "לִקְרֹא", type: "collective" },
+      { name: "לְקַפֵּל 30 פְּרִיטֵי כְּבִיסָה", type: "singular" },
+      { name: "לְהָרִים דְּבָרִים מֵהָרִצְפָּה בַּמִּרְפֶּסֶת", type: "general" },
+    ],
+  },
+  evening: {
+    title: "מְשִׂימוֹת עֶרֶב",
+    icon: "🌙",
+    tasks: [
+      { name: "מִקְלַחַת", type: "collective" },
+      { name: "לְהָכִין בְּגָדִים לְמָחָר", type: "collective" },
+      { name: "לְפַנּוֹת מֵדִיחַ", type: "singular" },
+      { name: "לְהַכְנִיס כֵּלִים לַמֵּדִיחַ", type: "singular" },
+      { name: "לְסַדֵּר חֲדַר אַמְבַּטְיָה", type: "singular" },
+      { name: "לְסַדֵּר שֵׁירוּתִים וְלִבְדֹּק שֶׁאֵין דְּבָרִים עַל הָרִצְפָּה", type: "general" },
+      { name: "לִכְתֹּב מָה בַּכְּרִיכִים לְמָחָר", type: "singular" },
     ],
   },
 };
 
 // ===== Storage =====
-const STORAGE_KEY = "hometasks_v1";
-const TASKS_KEY = "hometasks_tasks_v1";
+const STORAGE_KEY = "hometasks_v2";
+const TASKS_KEY = "hometasks_tasks_v2";
 
 function loadTasks() {
   try {
@@ -131,52 +129,41 @@ function loadTasks() {
   } catch (e) {}
   return DEFAULT_TASKS;
 }
-
-function saveTasks(t) {
-  localStorage.setItem(TASKS_KEY, JSON.stringify(t));
-}
-
+function saveTasks(t) { localStorage.setItem(TASKS_KEY, JSON.stringify(t)); }
 let TASKS = loadTasks();
 
 // ===== Date logic =====
-// "Day" runs from 06:00. Before 06:00, we still consider it yesterday's list.
+// Day runs from 06:00. Before 06:00 we still show yesterday's list.
 function getEffectiveDate(d = new Date()) {
   const x = new Date(d);
   if (x.getHours() < 6) x.setDate(x.getDate() - 1);
   x.setHours(0, 0, 0, 0);
   return x;
 }
-
 function dateKey(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
 function getDayOfYear(d) {
   const start = new Date(d.getFullYear(), 0, 0);
-  const diff = d - start;
-  return Math.floor(diff / 86400000);
+  return Math.floor((d - start) / 86400000);
 }
-
 function formatHebrewDate(d) {
-  const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-  const months = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
-  return `יום ${days[d.getDay()]}, ${d.getDate()} ב${months[d.getMonth()]} ${d.getFullYear()}`;
+  const days = ["רִאשׁוֹן","שֵׁנִי","שְׁלִישִׁי","רְבִיעִי","חֲמִישִׁי","שִׁישִּׁי","שַׁבָּת"];
+  const months = ["יָנוּאָר","פֶבְּרוּאָר","מֶרְץ","אַפְּרִיל","מַאי","יוּנִי","יוּלִי","אוֹגוּסְט","סֶפְּטֶמְבֶּר","אוֹקְטוֹבֶּר","נוֹבֶמְבֶּר","דֶּצֶמְבֶּר"];
+  return `יוֹם ${days[d.getDay()]}, ${d.getDate()} בְּ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 // ===== Assignment logic =====
-// Rotating tasks: deterministic per (date, sectionKey, taskIndex)
-function getRotatingAssignee(sectionKey, taskIndex, date) {
+function getSingularAssignee(sectionKey, taskIndex, date) {
   const dayNum = getDayOfYear(date);
-  // hash section so morning/evening/free don't all give the same kid the same task
-  const sectionHash = { morning: 0, evening: 1, free: 2 }[sectionKey] || 0;
+  const sectionHash = { morning: 0, free: 1, evening: 2 }[sectionKey] || 0;
   const offset = (dayNum + taskIndex + sectionHash * 7) % KIDS.length;
   return KIDS[offset];
 }
 
-// Build the day's task list per kid, per section
 function buildAssignments(date) {
   const out = {};
   for (const sectionKey of Object.keys(TASKS)) {
@@ -185,10 +172,10 @@ function buildAssignments(date) {
     KIDS.forEach(k => perKid[k] = []);
     const general = [];
     section.tasks.forEach((task, idx) => {
-      if (task.type === "personal") {
+      if (task.type === "collective") {
         KIDS.forEach(k => perKid[k].push(task.name));
-      } else if (task.type === "rotating") {
-        const kid = getRotatingAssignee(sectionKey, idx, date);
+      } else if (task.type === "singular") {
+        const kid = getSingularAssignee(sectionKey, idx, date);
         perKid[kid].push(task.name);
       } else if (task.type === "general") {
         general.push(task.name);
@@ -201,17 +188,10 @@ function buildAssignments(date) {
 
 // ===== State =====
 function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
+  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
   return null;
 }
-
-function saveState(s) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-}
-
+function saveState(s) { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
 function emptyChecked() {
   const out = {};
   for (const k of Object.keys(TASKS)) {
@@ -254,67 +234,75 @@ function render() {
     const data = assignments[sectionKey];
 
     const sec = document.createElement("section");
-    sec.className = "mb-8 rounded-3xl p-4 sm:p-6 bg-white shadow-md transition-colors";
+    sec.className = "mb-8 rounded-3xl p-4 sm:p-6 bg-slate-50 border border-slate-200 shadow-sm transition-colors";
     sec.dataset.section = sectionKey;
 
     const header = document.createElement("div");
     header.className = "flex items-center gap-3 mb-4";
     header.innerHTML = `
       <div class="text-3xl">${section.icon}</div>
-      <div>
+      <div class="min-w-0">
         <h2 class="text-xl sm:text-2xl font-black text-slate-900">${section.title}</h2>
-        ${section.subtitle ? `<p class="text-sm text-slate-500">${section.subtitle}</p>` : ""}
+        ${section.subtitle ? `<p class="text-sm text-slate-600">${section.subtitle}</p>` : ""}
       </div>
       <div class="ms-auto" data-role="section-badge"></div>
     `;
     sec.appendChild(header);
 
-    // Kid grid
+    const hasGeneral = data.general.length > 0;
     const grid = document.createElement("div");
-    grid.className = "grid grid-cols-2 lg:grid-cols-4 gap-3";
+    grid.className = `grid grid-cols-1 sm:grid-cols-2 ${hasGeneral ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3`;
+
     KIDS.forEach(kid => {
-      const tasks = data.perKid[kid];
-      const c = KID_COLORS[kid];
-      const card = document.createElement("div");
-      card.className = `kid-card rounded-2xl p-3 border-2 ${c.bg} ${c.border}`;
-      card.dataset.kid = kid;
-      const head = document.createElement("div");
-      head.className = `flex items-center justify-between mb-2`;
-      head.innerHTML = `
-        <div class="font-black text-lg ${c.text}">${kid}</div>
-        <div data-role="kid-badge"></div>
-      `;
-      card.appendChild(head);
-
-      if (tasks.length === 0) {
-        const none = document.createElement("div");
-        none.className = "text-sm text-slate-400 italic py-2";
-        none.textContent = "אין משימות מיוחדות 🎉";
-        card.appendChild(none);
-      } else {
-        tasks.forEach(taskName => {
-          card.appendChild(buildTaskRow(sectionKey, "kids", kid, taskName));
-        });
-      }
-      grid.appendChild(card);
+      grid.appendChild(buildColumn({
+        title: kid,
+        kid,
+        scope: "kids",
+        sectionKey,
+        items: data.perKid[kid],
+      }));
     });
-    sec.appendChild(grid);
 
-    // General tasks (everyone together)
-    if (data.general.length > 0) {
-      const genWrap = document.createElement("div");
-      genWrap.className = "mt-4 rounded-2xl p-3 border-2 bg-amber-50 border-amber-300";
-      genWrap.dataset.general = "1";
-      genWrap.innerHTML = `<div class="font-black text-lg text-amber-900 mb-2">👨‍👩‍👧‍👦 כולם יחד</div>`;
-      data.general.forEach(t => {
-        genWrap.appendChild(buildTaskRow(sectionKey, "general", null, t));
-      });
-      sec.appendChild(genWrap);
+    if (hasGeneral) {
+      grid.appendChild(buildColumn({
+        title: GENERAL_LABEL,
+        kid: null,
+        scope: "general",
+        sectionKey,
+        items: data.general,
+        isGeneral: true,
+      }));
     }
 
+    sec.appendChild(grid);
     root.appendChild(sec);
   }
   updateBadges();
+}
+
+function buildColumn({ title, kid, scope, sectionKey, items, isGeneral }) {
+  const card = document.createElement("div");
+  card.className = `col-card rounded-2xl p-3 border-2 bg-white border-slate-300 ${isGeneral ? 'border-dashed' : ''}`;
+  if (kid) card.dataset.kid = kid;
+  if (isGeneral) card.dataset.general = "1";
+
+  const head = document.createElement("div");
+  head.className = "flex items-center justify-between mb-2";
+  head.innerHTML = `
+    <div class="font-black text-lg text-slate-900">${title}</div>
+    <div data-role="col-badge"></div>
+  `;
+  card.appendChild(head);
+
+  if (items.length === 0) {
+    const none = document.createElement("div");
+    none.className = "text-sm text-slate-400 italic py-2";
+    none.textContent = "אֵין מְשִׂימוֹת מְיוּחָדוֹת 🎉";
+    card.appendChild(none);
+  } else {
+    items.forEach(taskName => card.appendChild(buildTaskRow(sectionKey, scope, kid, taskName)));
+  }
+  return card;
 }
 
 function buildTaskRow(sectionKey, scope, kid, taskName) {
@@ -356,19 +344,17 @@ function onToggle(sectionKey, scope, kid, taskName, val, row) {
   updateBadges();
 }
 
-// ===== Completion checking =====
+// ===== Completion =====
 function isKidDone(sectionKey, kid, assignments) {
   const tasks = assignments[sectionKey].perKid[kid];
   if (tasks.length === 0) return true;
   return tasks.every(t => isChecked(sectionKey, "kids", kid, t));
 }
-
 function isGeneralDone(sectionKey, assignments) {
   const tasks = assignments[sectionKey].general;
   if (tasks.length === 0) return true;
   return tasks.every(t => isChecked(sectionKey, "general", null, t));
 }
-
 function isSectionDone(sectionKey, assignments) {
   return KIDS.every(k => isKidDone(sectionKey, k, assignments)) && isGeneralDone(sectionKey, assignments);
 }
@@ -385,28 +371,42 @@ function updateBadges() {
     if (!sectionDone) allDone = false;
 
     sec.classList.toggle("bg-emerald-50", sectionDone);
+    sec.classList.toggle("border-emerald-400", sectionDone);
+    sec.classList.toggle("bg-slate-50", !sectionDone);
+    sec.classList.toggle("border-slate-200", !sectionDone);
     sec.classList.toggle("section-done", sectionDone);
+
     const sBadge = sec.querySelector('[data-role="section-badge"]');
     sBadge.innerHTML = sectionDone
-      ? `<div class="badge-pop bg-emerald-500 text-white text-sm font-bold px-3 py-1 rounded-full">✅ הושלם!</div>`
+      ? `<div class="badge-pop bg-emerald-500 text-white text-sm font-bold px-3 py-1 rounded-full">✅ הוּשְׁלַם!</div>`
       : "";
 
-    // kid cards
+    // kid columns
     KIDS.forEach(kid => {
       const card = sec.querySelector(`[data-kid="${kid}"]`);
       if (!card) return;
       const done = isKidDone(sectionKey, kid, assignments);
-      const c = KID_COLORS[kid];
-      if (done) {
-        card.classList.remove(c.bg, c.border);
-        card.classList.add("bg-green-100", "border-green-500", "done");
-      } else {
-        card.classList.add(c.bg, c.border);
-        card.classList.remove("bg-green-100", "border-green-500", "done");
-      }
-      const badge = card.querySelector('[data-role="kid-badge"]');
+      card.classList.toggle("bg-emerald-100", done);
+      card.classList.toggle("border-emerald-500", done);
+      card.classList.toggle("bg-white", !done);
+      card.classList.toggle("border-slate-300", !done);
+      card.classList.toggle("done", done);
+      const badge = card.querySelector('[data-role="col-badge"]');
       badge.innerHTML = done ? `<div class="badge-pop text-2xl">✅</div>` : "";
     });
+
+    // general column
+    const gen = sec.querySelector('[data-general="1"]');
+    if (gen) {
+      const done = isGeneralDone(sectionKey, assignments);
+      gen.classList.toggle("bg-emerald-100", done);
+      gen.classList.toggle("border-emerald-500", done);
+      gen.classList.toggle("bg-white", !done);
+      gen.classList.toggle("border-slate-300", !done);
+      gen.classList.toggle("done", done);
+      const badge = gen.querySelector('[data-role="col-badge"]');
+      badge.innerHTML = done ? `<div class="badge-pop text-2xl">✅</div>` : "";
+    }
   }
 
   const banner = document.getElementById("all-done");
@@ -434,14 +434,13 @@ function playPop() {
     g.gain.setValueAtTime(0.001, audioCtx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.15, audioCtx.currentTime + 0.01);
     g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-    o.start();
-    o.stop(audioCtx.currentTime + 0.15);
+    o.start(); o.stop(audioCtx.currentTime + 0.15);
   } catch (e) {}
 }
 
 // ===== Confetti =====
 function fireConfetti() {
-  const colors = ["#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#a855f7", "#ec4899"];
+  const colors = ["#0f172a", "#475569", "#16a34a", "#94a3b8", "#facc15", "#0ea5e9"];
   for (let i = 0; i < 80; i++) {
     const p = document.createElement("div");
     p.className = "confetti-piece";
@@ -455,9 +454,8 @@ function fireConfetti() {
   }
 }
 
-// ===== Parent edit mode (5 taps on date) =====
-let dateTaps = 0;
-let dateTapTimer = null;
+// ===== Parent edit (5 taps on date) =====
+let dateTaps = 0, dateTapTimer = null;
 document.getElementById("date-line").addEventListener("click", () => {
   dateTaps++;
   clearTimeout(dateTapTimer);
@@ -472,7 +470,6 @@ document.getElementById("date-line").addEventListener("click", () => {
     }
   }
 });
-
 document.getElementById("save-tasks").addEventListener("click", () => {
   try {
     const next = JSON.parse(document.getElementById("tasks-json").value);
@@ -486,7 +483,6 @@ document.getElementById("save-tasks").addEventListener("click", () => {
     alert("JSON לא תקין: " + e.message);
   }
 });
-
 document.getElementById("reset-tasks").addEventListener("click", () => {
   if (!confirm("לחזור לרשימת ברירת המחדל?")) return;
   localStorage.removeItem(TASKS_KEY);
@@ -496,7 +492,6 @@ document.getElementById("reset-tasks").addEventListener("click", () => {
   render();
   document.getElementById("tasks-json").value = JSON.stringify(TASKS, null, 2);
 });
-
 document.getElementById("manual-reset").addEventListener("click", () => {
   if (!confirm("לאפס את כל הסימונים של היום?")) return;
   state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
@@ -506,11 +501,7 @@ document.getElementById("manual-reset").addEventListener("click", () => {
 
 // ===== Boot =====
 render();
-
-// Auto-check every minute for date rollover (after 06:00)
 setInterval(checkDateReset, 60_000);
-
-// Service worker (PWA) — register if available
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
