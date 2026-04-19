@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=8"></script>
+<script src="tasks.js?v=9"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -37,7 +37,12 @@
   <header class="mb-6 text-center">
     <h1 class="text-3xl sm:text-4xl font-black text-slate-900 mb-1">מְשִׂימוֹת הַבַּיִת</h1>
     <p id="date-line" class="text-base sm:text-lg text-slate-700 font-medium" aria-live="polite"></p>
-    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button> · <a href="admin.html" class="underline hover:text-slate-700">מנהל</a> · <span id="sync-status" class="text-slate-400"></span></p>
+    <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button> · <a href="admin.html" class="underline hover:text-slate-700">מנהל</a></p>
+    <p class="text-xs mt-1">
+      <button id="sync-now-btn" class="underline">🔄 סנכרן עכשיו</button>
+      · <span id="sync-status" class="text-slate-500">לא מוגדר ענן</span>
+      · <span id="sync-time" class="text-slate-400 text-[10px]"></span>
+    </p>
   </header>
 
   <div id="setup-toast" class="hidden fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold px-5 py-3 rounded-2xl shadow-lg z-50">✅ מסונכרן עם הענן</div>
@@ -351,20 +356,28 @@ window.addEventListener("storage", (e) => {
 setInterval(reloadTasksAndRender, 3000);
 
 // ===== Cross-device cloud sync via Gist =====
-async function syncFromGist() {
-  if (!hasGistConfig()) return;
+async function syncFromGist(showInProgress) {
+  if (!hasGistConfig()) { setSyncStatus("⚪ ללא ענן"); return; }
+  if (showInProgress) setSyncStatus("⏳ מסנכרן…");
   try {
     const remote = await fetchTasksFromGist();
-    if (!remote) return;
+    setSyncTime();
+    if (!remote) {
+      setSyncStatus("☁️ הענן ריק");
+      return;
+    }
     const remoteJson = JSON.stringify(remote);
-    if (remoteJson === lastTasksJson) return;
+    if (remoteJson === lastTasksJson) {
+      setSyncStatus("☁️ מסונכרן");
+      return;
+    }
     saveTasks(remote);
     lastTasksJson = remoteJson;
     TASKS = remote;
     render();
-    setSyncStatus("☁️ מסונכרן");
+    setSyncStatus("☁️ עודכן עכשיו");
   } catch (e) {
-    setSyncStatus("⚠️ סנכרון נכשל");
+    setSyncStatus("⚠️ " + (e.message || "סנכרון נכשל"));
     console.warn("Gist sync failed:", e);
   }
 }
@@ -372,8 +385,16 @@ function setSyncStatus(text) {
   const el = document.getElementById("sync-status");
   if (el) el.textContent = text;
 }
+function setSyncTime() {
+  const el = document.getElementById("sync-time");
+  if (!el) return;
+  const d = new Date();
+  el.textContent = `(${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")})`;
+}
+document.getElementById("sync-now-btn").addEventListener("click", () => syncFromGist(true));
+
 if (hasGistConfig()) {
-  setSyncStatus("☁️ טוען...");
+  setSyncStatus("⏳ טוען מהענן…");
   syncFromGist();
   setInterval(syncFromGist, 30_000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncFromGist(); });
@@ -382,10 +403,12 @@ if (hasGistConfig()) {
 render();
 setInterval(checkDateReset, 60_000);
 
+// SW disabled — kill any existing registration so iPad always loads fresh code.
+// (sw.js is now a self-destruct that runs once and unregisters itself.)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister().catch(() => {}));
+  }).catch(() => {});
 }
 </script>
 </body>
