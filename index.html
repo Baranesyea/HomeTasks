@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f172a" />
+<title>משימות הבית - ברונשטיין</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
+  html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
+  body { background: #f8fafc; color: #0f172a; }
+  .kid-card { transition: background 250ms ease, border-color 250ms ease, transform 200ms ease; }
+  .kid-card.done { animation: cardWin 600ms ease; }
+  @keyframes cardWin { 0% { transform: scale(1); } 50% { transform: scale(1.04); } 100% { transform: scale(1); } }
+  .section-done { animation: sectionPulse 1.4s ease-in-out infinite; }
+  @keyframes sectionPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.35); } 50% { box-shadow: 0 0 0 12px rgba(34, 197, 94, 0); } }
+  .task-row { user-select: none; }
+  .task-row input[type="checkbox"] { width: 28px; height: 28px; cursor: pointer; accent-color: #16a34a; }
+  .task-row label { cursor: pointer; flex: 1; font-size: 1.05rem; line-height: 1.4; }
+  .task-row.checked label { text-decoration: line-through; opacity: 0.5; }
+  .confetti-piece { position: fixed; width: 10px; height: 14px; top: -20px; opacity: 0.9; z-index: 9999; pointer-events: none; }
+  @keyframes confettiFall { to { transform: translateY(110vh) rotate(720deg); opacity: 0; } }
+  .badge-pop { animation: badgePop 500ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+  @keyframes badgePop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+  .all-done-banner { background: linear-gradient(135deg, #fef3c7, #fde68a, #fcd34d); }
+  /* parent edit mode */
+  .editing { outline: 2px dashed #f59e0b; outline-offset: 4px; }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+</style>
+</head>
+<body class="min-h-screen pb-12">
+<div class="max-w-6xl mx-auto px-3 sm:px-6 pt-6">
+
+  <!-- Header -->
+  <header class="mb-6 text-center">
+    <h1 class="text-3xl sm:text-4xl font-black text-slate-900 mb-1">משימות הבית</h1>
+    <p id="date-line" class="text-base sm:text-lg text-slate-600 font-medium" aria-live="polite"></p>
+    <p class="text-xs text-slate-400 mt-1">רשימה חדשה נוצרת כל בוקר ב-06:00 · <button id="manual-reset" class="underline hover:text-slate-600">איפוס ידני</button></p>
+  </header>
+
+  <!-- Banner when all done -->
+  <div id="all-done" class="hidden all-done-banner rounded-3xl p-6 text-center mb-6 shadow-lg">
+    <div class="text-4xl mb-2">🌟</div>
+    <div class="text-2xl font-black text-amber-900">יום מעולה! כולם סיימו הכל</div>
+    <div class="text-amber-800 mt-1">תהיו גאים בעצמכם 💪</div>
+  </div>
+
+  <!-- Sections render here -->
+  <main id="sections"></main>
+
+  <!-- Parent edit panel (hidden, opens via 5 taps on date) -->
+  <details id="parent-panel" class="hidden mt-10 bg-white rounded-2xl shadow p-4">
+    <summary class="font-bold text-slate-700">⚙️ מצב הורה (עריכה)</summary>
+    <div class="mt-4 text-sm text-slate-600">
+      עריכה ישירה של רשימת המשימות (JSON). שמור ב-localStorage.
+      <textarea id="tasks-json" class="w-full h-64 mt-2 p-3 border rounded-lg font-mono text-xs" dir="ltr"></textarea>
+      <div class="flex gap-2 mt-2">
+        <button id="save-tasks" class="bg-emerald-600 text-white px-4 py-2 rounded-lg">שמור</button>
+        <button id="reset-tasks" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg">חזור לברירת מחדל</button>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+// ===== Constants =====
+const KIDS = ["שיה", "מיכאל", "יער", "דין"];
+
+const KID_COLORS = {
+  "שיה":   { bg: "bg-blue-50",   border: "border-blue-300",   text: "text-blue-900",   accent: "bg-blue-500"   },
+  "מיכאל": { bg: "bg-purple-50", border: "border-purple-300", text: "text-purple-900", accent: "bg-purple-500" },
+  "יער":   { bg: "bg-teal-50",   border: "border-teal-300",   text: "text-teal-900",   accent: "bg-teal-500"   },
+  "דין":   { bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-900", accent: "bg-orange-500" },
+};
+
+// task types: "rotating" (one kid per day, rotates), "personal" (each kid does own), "general" (everyone together)
+const DEFAULT_TASKS = {
+  morning: {
+    title: "משימות בוקר",
+    icon: "🌅",
+    tasks: [
+      { name: "לפנות מדיח", type: "rotating" },
+      { name: "להכניס כלים למדיח", type: "rotating" },
+      { name: "לסדר מיטה", type: "personal" },
+      { name: "לסדר חדר שינה", type: "personal" },
+      { name: "לסדר חדר עבודה", type: "rotating" },
+      { name: "לסדר חדר אמבטיה אחרי התארגנות", type: "rotating" },
+      { name: "לכבות אורות", type: "rotating" },
+      { name: "לסדר תיק לבית הספר", type: "personal" },
+      { name: "למלא בקבוק מים", type: "personal" },
+    ],
+  },
+  evening: {
+    title: "משימות ערב",
+    icon: "🌙",
+    tasks: [
+      { name: "מקלחת", type: "personal" },
+      { name: "להכין בגדים למחר", type: "personal" },
+      { name: "לפנות מדיח", type: "rotating" },
+      { name: "להכניס כלים למדיח", type: "rotating" },
+      { name: "לסדר חדר אמבטיה", type: "rotating" },
+      { name: "לסדר שירותים ולבדוק שאין דברים על הרצפה", type: "general" },
+      { name: "לכתוב מה בכריכים למחר", type: "rotating" },
+    ],
+  },
+  free: {
+    title: "משימות חופשיות",
+    icon: "☀️",
+    subtitle: "מתי שבא לכם - רק שייעשה היום",
+    tasks: [
+      { name: "לקרוא", type: "personal" },
+      { name: "להרים דברים מהרצפה במרפסת", type: "general" },
+      { name: "לקפל 30 פריטי כביסה", type: "rotating" },
+    ],
+  },
+};
+
+// ===== Storage =====
+const STORAGE_KEY = "hometasks_v1";
+const TASKS_KEY = "hometasks_tasks_v1";
+
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(TASKS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return DEFAULT_TASKS;
+}
+
+function saveTasks(t) {
+  localStorage.setItem(TASKS_KEY, JSON.stringify(t));
+}
+
+let TASKS = loadTasks();
+
+// ===== Date logic =====
+// "Day" runs from 06:00. Before 06:00, we still consider it yesterday's list.
+function getEffectiveDate(d = new Date()) {
+  const x = new Date(d);
+  if (x.getHours() < 6) x.setDate(x.getDate() - 1);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function dateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function getDayOfYear(d) {
+  const start = new Date(d.getFullYear(), 0, 0);
+  const diff = d - start;
+  return Math.floor(diff / 86400000);
+}
+
+function formatHebrewDate(d) {
+  const days = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+  const months = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+  return `יום ${days[d.getDay()]}, ${d.getDate()} ב${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// ===== Assignment logic =====
+// Rotating tasks: deterministic per (date, sectionKey, taskIndex)
+function getRotatingAssignee(sectionKey, taskIndex, date) {
+  const dayNum = getDayOfYear(date);
+  // hash section so morning/evening/free don't all give the same kid the same task
+  const sectionHash = { morning: 0, evening: 1, free: 2 }[sectionKey] || 0;
+  const offset = (dayNum + taskIndex + sectionHash * 7) % KIDS.length;
+  return KIDS[offset];
+}
+
+// Build the day's task list per kid, per section
+function buildAssignments(date) {
+  const out = {};
+  for (const sectionKey of Object.keys(TASKS)) {
+    const section = TASKS[sectionKey];
+    const perKid = {};
+    KIDS.forEach(k => perKid[k] = []);
+    const general = [];
+    section.tasks.forEach((task, idx) => {
+      if (task.type === "personal") {
+        KIDS.forEach(k => perKid[k].push(task.name));
+      } else if (task.type === "rotating") {
+        const kid = getRotatingAssignee(sectionKey, idx, date);
+        perKid[kid].push(task.name);
+      } else if (task.type === "general") {
+        general.push(task.name);
+      }
+    });
+    out[sectionKey] = { perKid, general };
+  }
+  return out;
+}
+
+// ===== State =====
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+
+function saveState(s) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+}
+
+function emptyChecked() {
+  const out = {};
+  for (const k of Object.keys(TASKS)) {
+    out[k] = { kids: {}, general: {} };
+    KIDS.forEach(kid => out[k].kids[kid] = {});
+  }
+  return out;
+}
+
+let state = (() => {
+  const today = dateKey(getEffectiveDate());
+  const existing = loadState();
+  if (existing && existing.date === today) return existing;
+  const fresh = { date: today, checked: emptyChecked() };
+  saveState(fresh);
+  return fresh;
+})();
+
+function checkDateReset() {
+  const today = dateKey(getEffectiveDate());
+  if (state.date !== today) {
+    state = { date: today, checked: emptyChecked() };
+    saveState(state);
+    render();
+    return true;
+  }
+  return false;
+}
+
+// ===== Rendering =====
+function render() {
+  const date = getEffectiveDate();
+  document.getElementById("date-line").textContent = formatHebrewDate(date);
+  const assignments = buildAssignments(date);
+  const root = document.getElementById("sections");
+  root.innerHTML = "";
+
+  for (const sectionKey of Object.keys(TASKS)) {
+    const section = TASKS[sectionKey];
+    const data = assignments[sectionKey];
+
+    const sec = document.createElement("section");
+    sec.className = "mb-8 rounded-3xl p-4 sm:p-6 bg-white shadow-md transition-colors";
+    sec.dataset.section = sectionKey;
+
+    const header = document.createElement("div");
+    header.className = "flex items-center gap-3 mb-4";
+    header.innerHTML = `
+      <div class="text-3xl">${section.icon}</div>
+      <div>
+        <h2 class="text-xl sm:text-2xl font-black text-slate-900">${section.title}</h2>
+        ${section.subtitle ? `<p class="text-sm text-slate-500">${section.subtitle}</p>` : ""}
+      </div>
+      <div class="ms-auto" data-role="section-badge"></div>
+    `;
+    sec.appendChild(header);
+
+    // Kid grid
+    const grid = document.createElement("div");
+    grid.className = "grid grid-cols-2 lg:grid-cols-4 gap-3";
+    KIDS.forEach(kid => {
+      const tasks = data.perKid[kid];
+      const c = KID_COLORS[kid];
+      const card = document.createElement("div");
+      card.className = `kid-card rounded-2xl p-3 border-2 ${c.bg} ${c.border}`;
+      card.dataset.kid = kid;
+      const head = document.createElement("div");
+      head.className = `flex items-center justify-between mb-2`;
+      head.innerHTML = `
+        <div class="font-black text-lg ${c.text}">${kid}</div>
+        <div data-role="kid-badge"></div>
+      `;
+      card.appendChild(head);
+
+      if (tasks.length === 0) {
+        const none = document.createElement("div");
+        none.className = "text-sm text-slate-400 italic py-2";
+        none.textContent = "אין משימות מיוחדות 🎉";
+        card.appendChild(none);
+      } else {
+        tasks.forEach(taskName => {
+          card.appendChild(buildTaskRow(sectionKey, "kids", kid, taskName));
+        });
+      }
+      grid.appendChild(card);
+    });
+    sec.appendChild(grid);
+
+    // General tasks (everyone together)
+    if (data.general.length > 0) {
+      const genWrap = document.createElement("div");
+      genWrap.className = "mt-4 rounded-2xl p-3 border-2 bg-amber-50 border-amber-300";
+      genWrap.dataset.general = "1";
+      genWrap.innerHTML = `<div class="font-black text-lg text-amber-900 mb-2">👨‍👩‍👧‍👦 כולם יחד</div>`;
+      data.general.forEach(t => {
+        genWrap.appendChild(buildTaskRow(sectionKey, "general", null, t));
+      });
+      sec.appendChild(genWrap);
+    }
+
+    root.appendChild(sec);
+  }
+  updateBadges();
+}
+
+function buildTaskRow(sectionKey, scope, kid, taskName) {
+  const row = document.createElement("div");
+  row.className = "task-row flex items-center gap-3 py-1.5";
+  const id = `cb-${sectionKey}-${scope}-${kid || "_"}-${taskName}`.replace(/\s+/g, "_");
+  const checked = isChecked(sectionKey, scope, kid, taskName);
+  if (checked) row.classList.add("checked");
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.id = id;
+  cb.checked = checked;
+  cb.addEventListener("change", () => onToggle(sectionKey, scope, kid, taskName, cb.checked, row));
+  const label = document.createElement("label");
+  label.htmlFor = id;
+  label.textContent = taskName;
+  row.appendChild(cb);
+  row.appendChild(label);
+  return row;
+}
+
+function isChecked(sectionKey, scope, kid, taskName) {
+  const s = state.checked[sectionKey];
+  if (!s) return false;
+  if (scope === "kids") return !!(s.kids[kid] && s.kids[kid][taskName]);
+  return !!s.general[taskName];
+}
+
+function onToggle(sectionKey, scope, kid, taskName, val, row) {
+  if (scope === "kids") {
+    state.checked[sectionKey].kids[kid] = state.checked[sectionKey].kids[kid] || {};
+    state.checked[sectionKey].kids[kid][taskName] = val;
+  } else {
+    state.checked[sectionKey].general[taskName] = val;
+  }
+  saveState(state);
+  row.classList.toggle("checked", val);
+  if (val) playPop();
+  updateBadges();
+}
+
+// ===== Completion checking =====
+function isKidDone(sectionKey, kid, assignments) {
+  const tasks = assignments[sectionKey].perKid[kid];
+  if (tasks.length === 0) return true;
+  return tasks.every(t => isChecked(sectionKey, "kids", kid, t));
+}
+
+function isGeneralDone(sectionKey, assignments) {
+  const tasks = assignments[sectionKey].general;
+  if (tasks.length === 0) return true;
+  return tasks.every(t => isChecked(sectionKey, "general", null, t));
+}
+
+function isSectionDone(sectionKey, assignments) {
+  return KIDS.every(k => isKidDone(sectionKey, k, assignments)) && isGeneralDone(sectionKey, assignments);
+}
+
+function updateBadges() {
+  const date = getEffectiveDate();
+  const assignments = buildAssignments(date);
+  let allDone = true;
+
+  for (const sectionKey of Object.keys(TASKS)) {
+    const sec = document.querySelector(`[data-section="${sectionKey}"]`);
+    if (!sec) continue;
+    const sectionDone = isSectionDone(sectionKey, assignments);
+    if (!sectionDone) allDone = false;
+
+    sec.classList.toggle("bg-emerald-50", sectionDone);
+    sec.classList.toggle("section-done", sectionDone);
+    const sBadge = sec.querySelector('[data-role="section-badge"]');
+    sBadge.innerHTML = sectionDone
+      ? `<div class="badge-pop bg-emerald-500 text-white text-sm font-bold px-3 py-1 rounded-full">✅ הושלם!</div>`
+      : "";
+
+    // kid cards
+    KIDS.forEach(kid => {
+      const card = sec.querySelector(`[data-kid="${kid}"]`);
+      if (!card) return;
+      const done = isKidDone(sectionKey, kid, assignments);
+      const c = KID_COLORS[kid];
+      if (done) {
+        card.classList.remove(c.bg, c.border);
+        card.classList.add("bg-green-100", "border-green-500", "done");
+      } else {
+        card.classList.add(c.bg, c.border);
+        card.classList.remove("bg-green-100", "border-green-500", "done");
+      }
+      const badge = card.querySelector('[data-role="kid-badge"]');
+      badge.innerHTML = done ? `<div class="badge-pop text-2xl">✅</div>` : "";
+    });
+  }
+
+  const banner = document.getElementById("all-done");
+  if (allDone && Object.keys(TASKS).length > 0) {
+    if (banner.classList.contains("hidden")) {
+      banner.classList.remove("hidden");
+      fireConfetti();
+    }
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
+// ===== Sound =====
+let audioCtx = null;
+function playPop() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.type = "sine";
+    o.frequency.setValueAtTime(880, audioCtx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.08);
+    g.gain.setValueAtTime(0.001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.15, audioCtx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.15);
+  } catch (e) {}
+}
+
+// ===== Confetti =====
+function fireConfetti() {
+  const colors = ["#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#a855f7", "#ec4899"];
+  for (let i = 0; i < 80; i++) {
+    const p = document.createElement("div");
+    p.className = "confetti-piece";
+    p.style.left = Math.random() * 100 + "vw";
+    p.style.background = colors[i % colors.length];
+    p.style.transform = `rotate(${Math.random() * 360}deg)`;
+    p.style.animation = `confettiFall ${1.8 + Math.random() * 1.4}s ease-in forwards`;
+    p.style.animationDelay = (Math.random() * 0.4) + "s";
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 4000);
+  }
+}
+
+// ===== Parent edit mode (5 taps on date) =====
+let dateTaps = 0;
+let dateTapTimer = null;
+document.getElementById("date-line").addEventListener("click", () => {
+  dateTaps++;
+  clearTimeout(dateTapTimer);
+  dateTapTimer = setTimeout(() => dateTaps = 0, 1500);
+  if (dateTaps >= 5) {
+    dateTaps = 0;
+    const panel = document.getElementById("parent-panel");
+    panel.classList.toggle("hidden");
+    if (!panel.classList.contains("hidden")) {
+      panel.open = true;
+      document.getElementById("tasks-json").value = JSON.stringify(TASKS, null, 2);
+    }
+  }
+});
+
+document.getElementById("save-tasks").addEventListener("click", () => {
+  try {
+    const next = JSON.parse(document.getElementById("tasks-json").value);
+    TASKS = next;
+    saveTasks(next);
+    state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
+    saveState(state);
+    render();
+    alert("נשמר!");
+  } catch (e) {
+    alert("JSON לא תקין: " + e.message);
+  }
+});
+
+document.getElementById("reset-tasks").addEventListener("click", () => {
+  if (!confirm("לחזור לרשימת ברירת המחדל?")) return;
+  localStorage.removeItem(TASKS_KEY);
+  TASKS = DEFAULT_TASKS;
+  state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
+  saveState(state);
+  render();
+  document.getElementById("tasks-json").value = JSON.stringify(TASKS, null, 2);
+});
+
+document.getElementById("manual-reset").addEventListener("click", () => {
+  if (!confirm("לאפס את כל הסימונים של היום?")) return;
+  state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
+  saveState(state);
+  render();
+});
+
+// ===== Boot =====
+render();
+
+// Auto-check every minute for date rollover (after 06:00)
+setInterval(checkDateReset, 60_000);
+
+// Service worker (PWA) — register if available
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
