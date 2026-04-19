@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=10"></script>
+<script src="tasks.js?v=11"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -39,11 +39,15 @@
     <p id="date-line" class="text-base sm:text-lg text-slate-700 font-medium" aria-live="polite"></p>
     <p class="text-xs text-slate-500 mt-1">רְשִׁימָה חֲדָשָׁה נוֹצֶרֶת כָּל בּוֹקֶר בְּ-06:00 · <button id="manual-reset" class="underline hover:text-slate-700">אִיפּוּס יָדָנִי</button> · <a href="admin.html" class="underline hover:text-slate-700">מנהל</a></p>
     <p class="text-xs mt-1">
-      <button id="sync-now-btn" class="underline">🔄 סנכרן עכשיו</button>
-      · <span id="sync-status" class="text-slate-500">לא מוגדר ענן</span>
+      <span id="sync-status" class="text-slate-500">לא מוגדר ענן</span>
       · <span id="sync-time" class="text-slate-400 text-[10px]"></span>
     </p>
   </header>
+
+  <!-- Floating refresh button — easy to tap on PWA where there's no browser refresh -->
+  <button id="sync-now-btn" aria-label="רענן" class="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-slate-900 text-white shadow-lg flex items-center justify-center text-2xl active:scale-95 transition-transform">
+    🔄
+  </button>
 
   <div id="setup-toast" class="hidden fixed top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white font-bold px-5 py-3 rounded-2xl shadow-lg z-50">✅ מסונכרן עם הענן</div>
 
@@ -432,7 +436,14 @@ if (hasGistConfig()) {
   setSyncStatus("⏳ טוען מהענן…");
   syncFromGist();
   setInterval(syncFromGist, 30_000);
+
+  // Cover all the ways iOS PWA / Safari can "wake up" the page without a real reload:
   document.addEventListener("visibilitychange", () => { if (!document.hidden) syncFromGist(); });
+  window.addEventListener("pageshow", (e) => {
+    // e.persisted = true means restored from bfcache (no init re-ran)
+    if (e.persisted || hasGistConfig()) syncFromGist();
+  });
+  window.addEventListener("focus", () => syncFromGist());
 }
 refreshCloudSetupVisibility();
 
