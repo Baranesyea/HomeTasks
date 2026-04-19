@@ -7,7 +7,7 @@
 <title>מנהל · משימות הבית</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=3"></script>
+<script src="tasks.js?v=4"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
@@ -47,15 +47,19 @@
   <div id="admin-app" class="hidden">
 
     <div class="bg-white rounded-2xl shadow p-4 mb-4">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="text-sm text-slate-700">
-          🟡 שינויים נשמרים מקומית בדפדפן הזה (<code>localStorage</code>). בכל מכשיר צריך לעדכן בנפרד, או לעדכן את ברירת המחדל ב-<code>tasks.js</code> ולדחוף ל-Git.
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="text-sm text-slate-700 flex-1 min-w-[200px]">
+          🟡 שינויים נשמרים מקומית בדפדפן הזה. אם הילדים פתוחים בטאב/מכשיר אחר — לחץ "רענן ממשק ילדים" אחרי שמירה.
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          <button id="force-refresh-btn" class="bg-blue-600 text-white font-bold text-sm px-4 py-2 rounded-lg shadow hover:bg-blue-700">
+            🔄 רענן ממשק הילדים
+          </button>
           <button id="reset-defaults" class="bg-slate-200 text-slate-800 text-sm px-3 py-2 rounded-lg">↺ שחזור ברירת מחדל</button>
           <button id="logout-btn" class="bg-slate-100 text-slate-700 text-sm px-3 py-2 rounded-lg">יציאה</button>
         </div>
       </div>
+      <div id="status-line" class="hidden mt-2 text-xs text-emerald-700 font-bold"></div>
     </div>
 
     <!-- Sections -->
@@ -236,11 +240,24 @@ function renderAdmin() {
   document.getElementById("json-area").value = JSON.stringify(TASKS, null, 2);
 }
 
+// BroadcastChannel for instant cross-tab sync to kids' UI
+let bc = null;
+try { bc = new BroadcastChannel("hometasks"); } catch (e) {}
+
 function persist() {
   saveTasks(TASKS);
-  // Wipe today's checked state since assignment may change
-  clearCheckedState();
+  // Don't wipe checked state — orphan keys are harmless, valid checks survive
+  if (bc) bc.postMessage({ type: "tasks-updated" });
   renderAdmin();
+  flashStatus("✅ נשמר וסונכרן");
+}
+
+function flashStatus(msg) {
+  const el = document.getElementById("status-line");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  clearTimeout(flashStatus._t);
+  flashStatus._t = setTimeout(() => el.classList.add("hidden"), 2500);
 }
 
 // ===== Edit modal =====
@@ -288,12 +305,18 @@ document.getElementById("edit-save").addEventListener("click", () => {
   persist();
 });
 
+// ===== Force-refresh kids' UI =====
+document.getElementById("force-refresh-btn").addEventListener("click", () => {
+  if (bc) bc.postMessage({ type: "force-reload" });
+  flashStatus("🔄 נשלח רענון לכל ממשק הילדים הפתוח");
+});
+
 // ===== Reset & JSON =====
 document.getElementById("reset-defaults").addEventListener("click", () => {
   if (!confirm("לחזור לרשימת ברירת המחדל? כל השינויים יימחקו.")) return;
   resetTasksToDefault();
   TASKS = loadTasks();
-  clearCheckedState();
+  if (bc) bc.postMessage({ type: "tasks-updated" });
   renderAdmin();
 });
 document.getElementById("json-save").addEventListener("click", () => {

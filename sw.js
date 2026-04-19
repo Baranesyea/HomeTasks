@@ -1,5 +1,5 @@
-const CACHE = "hometasks-v3";
-const ASSETS = ["./", "./index.html", "./admin.html", "./tasks.js", "./manifest.json", "./icon.svg"];
+const CACHE = "hometasks-v4";
+const ASSETS = ["./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).catch(() => {}));
@@ -13,13 +13,28 @@ self.addEventListener("activate", e => {
   self.clients.claim();
 });
 
+// Network-first for HTML/JS so admin changes propagate immediately.
+// Cache-first for static assets (manifest, icon).
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
-  e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match("./index.html")))
-  );
+  const url = new URL(e.request.url);
+  const isCode = url.pathname.endsWith(".html") || url.pathname.endsWith(".js") || url.pathname === "/" || url.pathname.endsWith("/HomeTasks/") || url.pathname.endsWith("/HomeTasks");
+
+  if (isCode) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return res;
+      }).catch(() => caches.match(e.request).then(hit => hit || caches.match("./index.html")))
+    );
+  } else {
+    e.respondWith(
+      caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
+        return res;
+      }))
+    );
+  }
 });

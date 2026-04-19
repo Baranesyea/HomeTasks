@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=3"></script>
+<script src="tasks.js?v=4"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -309,15 +309,36 @@ document.getElementById("manual-reset").addEventListener("click", () => {
   render();
 });
 
-// Reload TASKS when admin saves changes (works across same-origin tabs/storage events)
+// ===== Sync from admin (3 mechanisms, any one is enough) =====
+function reloadTasksAndRender() {
+  const newJson = JSON.stringify(loadTasks());
+  if (newJson === lastTasksJson) return;
+  lastTasksJson = newJson;
+  TASKS = JSON.parse(newJson);
+  // Don't wipe checked state — orphan keys are harmless, valid checks survive
+  render();
+}
+
+let lastTasksJson = JSON.stringify(TASKS);
+
+// 1) BroadcastChannel — instant cross-tab sync
+let bc = null;
+try { bc = new BroadcastChannel("hometasks"); } catch (e) {}
+if (bc) {
+  bc.onmessage = (ev) => {
+    if (!ev.data) return;
+    if (ev.data.type === "tasks-updated") reloadTasksAndRender();
+    else if (ev.data.type === "force-reload") location.reload();
+  };
+}
+
+// 2) storage event — fallback for browsers/contexts where BroadcastChannel isn't available
 window.addEventListener("storage", (e) => {
-  if (e.key === TASKS_KEY) {
-    TASKS = loadTasks();
-    state = { date: dateKey(getEffectiveDate()), checked: emptyChecked() };
-    saveCheckedState(state);
-    render();
-  }
+  if (e.key === TASKS_KEY) reloadTasksAndRender();
 });
+
+// 3) Polling every 3s — last-resort fallback (catches anything the others miss)
+setInterval(reloadTasksAndRender, 3000);
 
 render();
 setInterval(checkDateReset, 60_000);
