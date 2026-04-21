@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=12"></script>
+<script src="tasks.js?v=13"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -143,8 +143,18 @@ function render() {
     sec.appendChild(header);
 
     const hasGeneral = data.general.length > 0;
+    // When general has many tasks, make it span 2 grid cells so we can render
+    // its tasks in 2 inner columns — keeps section height matched to kid cards.
+    const WIDE_THRESHOLD = 6;
+    const generalWide = data.general.length > WIDE_THRESHOLD;
     const grid = document.createElement("div");
-    grid.className = `grid grid-cols-1 sm:grid-cols-2 ${hasGeneral ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3`;
+    if (!hasGeneral) {
+      grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3";
+    } else if (generalWide) {
+      grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3";
+    } else {
+      grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3";
+    }
 
     KIDS.forEach(kid => {
       grid.appendChild(buildColumn({
@@ -156,7 +166,7 @@ function render() {
     if (hasGeneral) {
       grid.appendChild(buildColumn({
         title: GENERAL_LABEL, kid: null, scope: "general", sectionKey,
-        items: data.general, isGeneral: true,
+        items: data.general, isGeneral: true, wide: generalWide,
       }));
     }
 
@@ -166,9 +176,12 @@ function render() {
   updateBadges();
 }
 
-function buildColumn({ title, kid, scope, sectionKey, items, isGeneral }) {
+function buildColumn({ title, kid, scope, sectionKey, items, isGeneral, wide }) {
   const card = document.createElement("div");
-  card.className = `col-card rounded-2xl p-3 border-2 bg-white border-slate-300 ${isGeneral ? 'border-dashed' : ''}`;
+  const classes = ["col-card rounded-2xl p-3 border-2 bg-white border-slate-300"];
+  if (isGeneral) classes.push("border-dashed");
+  if (wide) classes.push("lg:col-span-2");
+  card.className = classes.join(" ");
   if (kid) card.dataset.kid = kid;
   if (isGeneral) card.dataset.general = "1";
 
@@ -180,13 +193,22 @@ function buildColumn({ title, kid, scope, sectionKey, items, isGeneral }) {
   `;
   card.appendChild(head);
 
+  // Wide columns flow tasks into 2 inner columns on lg screens — keeps height short.
+  const tasksWrap = document.createElement("div");
+  if (wide) tasksWrap.className = "lg:columns-2 lg:gap-x-4";
+  card.appendChild(tasksWrap);
+
   if (items.length === 0) {
     const none = document.createElement("div");
     none.className = "text-sm text-slate-400 italic py-2";
     none.textContent = "אֵין מְשִׂימוֹת מְיוּחָדוֹת 🎉";
-    card.appendChild(none);
+    tasksWrap.appendChild(none);
   } else {
-    items.forEach(taskName => card.appendChild(buildTaskRow(sectionKey, scope, kid, taskName)));
+    items.forEach(taskName => {
+      const row = buildTaskRow(sectionKey, scope, kid, taskName);
+      if (wide) row.classList.add("break-inside-avoid");
+      tasksWrap.appendChild(row);
+    });
   }
   return card;
 }

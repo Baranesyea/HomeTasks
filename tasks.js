@@ -187,6 +187,35 @@ function buildSetupUrl(baseUrl) {
   return `${baseUrl}#setup=${encoded}`;
 }
 
+// ===== Niqqud (Hebrew vowels) =====
+// Returns true if the text already contains any Hebrew niqqud characters.
+function hasNiqqud(text) {
+  return /[֑-ֽֿׁ-ׂׄ-ׇׅ]/.test(text || "");
+}
+
+// Auto-vocalize Hebrew text via DICTA Nakdan API. Throws on network/parse failure.
+async function nakdanText(text) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const res = await fetch("https://nakdan-5-3.loadbalancer.dicta.org.il/api", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "nakdan", data: text, genre: "modern", addmorph: false }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`Nakdan ${res.status}`);
+    const arr = await res.json();
+    return arr.map(w => {
+      if (w.sep) return w.word;
+      const opt = (w.options && w.options[0]) || w.word;
+      return opt.replace(/\|/g, "");
+    }).join("");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ===== Date helpers =====
 function getEffectiveDate(d = new Date()) {
   const x = new Date(d);

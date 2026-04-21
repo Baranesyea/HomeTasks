@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="tasks.js?v=12"></script>
+<script src="tasks.js?v=13"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
@@ -124,11 +124,27 @@
   </div>
 </div>
 
+<!-- Niqqud preview modal -->
+<div id="niqqud-modal" class="hidden fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full">
+    <h3 class="font-bold text-lg mb-3">✨ אישור ניקוד</h3>
+    <div class="text-xs text-slate-500 mb-1">הטקסט המקורי:</div>
+    <div id="niqqud-original" class="text-slate-600 mb-3 bg-slate-50 p-2 rounded text-sm" dir="rtl"></div>
+    <label class="block text-sm font-bold text-slate-700 mb-1">עם ניקוד (ניתן לערוך):</label>
+    <input id="niqqud-result" class="w-full p-3 border rounded-lg text-lg mb-2" dir="rtl" />
+    <div id="niqqud-error" class="hidden mb-3 text-xs font-bold text-amber-700"></div>
+    <div class="flex gap-2 justify-end mt-3">
+      <button id="niqqud-cancel" class="bg-slate-200 text-slate-800 px-4 py-2 rounded-lg">בטל</button>
+      <button id="niqqud-confirm" class="bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg">שמור</button>
+    </div>
+  </div>
+</div>
+
 <!-- Edit task modal -->
 <div id="edit-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
   <div class="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full">
     <h3 class="font-bold text-lg mb-3">עריכת משימה</h3>
-    <label class="block text-sm font-bold text-slate-700 mb-1">שם המשימה (עם ניקוד)</label>
+    <label class="block text-sm font-bold text-slate-700 mb-1">שם המשימה (ניקוד יתווסף אוטומטית)</label>
     <input id="edit-name" class="w-full p-3 border rounded-lg mb-3" />
     <label class="block text-sm font-bold text-slate-700 mb-1">סוג</label>
     <select id="edit-type" class="w-full p-3 border rounded-lg mb-3">
@@ -232,7 +248,7 @@ function renderAdmin() {
     addForm.innerHTML = `
       <div class="text-sm font-bold text-slate-700 mb-2">➕ הוסף משימה</div>
       <div class="flex flex-col sm:flex-row gap-2">
-        <input data-section="${sectionKey}" data-role="add-name" class="flex-1 p-2 border border-slate-300 rounded-lg" placeholder="שם המשימה (עם ניקוד)" />
+        <input data-section="${sectionKey}" data-role="add-name" class="flex-1 p-2 border border-slate-300 rounded-lg" placeholder="שם המשימה (ניקוד יתווסף אוטומטית)" />
         <select data-section="${sectionKey}" data-role="add-type" class="p-2 border border-slate-300 rounded-lg">
           <option value="singular">יחידנית</option>
           <option value="collective">קולקטיבית</option>
@@ -247,7 +263,7 @@ function renderAdmin() {
   }
 
   // Wire up buttons (event delegation)
-  root.onclick = (e) => {
+  root.onclick = async (e) => {
     const btn = e.target.closest("button[data-act]");
     if (!btn) return;
     const act = btn.dataset.act;
@@ -256,8 +272,13 @@ function renderAdmin() {
       const sectionKey = btn.dataset.section;
       const nameEl = root.querySelector(`input[data-role="add-name"][data-section="${sectionKey}"]`);
       const typeEl = root.querySelector(`select[data-role="add-type"][data-section="${sectionKey}"]`);
-      const name = (nameEl.value || "").trim();
+      let name = (nameEl.value || "").trim();
       if (!name) { nameEl.focus(); return; }
+      if (!hasNiqqud(name)) {
+        const vocalized = await askNiqqud(name);
+        if (!vocalized) return; // user cancelled
+        name = vocalized;
+      }
       TASKS[sectionKey].tasks.push({ name, type: typeEl.value });
       nameEl.value = "";
       persist();
@@ -381,12 +402,18 @@ document.getElementById("edit-cancel").addEventListener("click", () => {
   document.getElementById("edit-modal").classList.add("hidden");
   editTarget = null;
 });
-document.getElementById("edit-save").addEventListener("click", () => {
+document.getElementById("edit-save").addEventListener("click", async () => {
   if (!editTarget) return;
-  const newName = document.getElementById("edit-name").value.trim();
+  let newName = document.getElementById("edit-name").value.trim();
   const newType = document.getElementById("edit-type").value;
   const newSection = document.getElementById("edit-section").value;
   if (!newName) return;
+
+  if (!hasNiqqud(newName)) {
+    const vocalized = await askNiqqud(newName);
+    if (!vocalized) return;
+    newName = vocalized;
+  }
 
   const { sectionKey, idx } = editTarget;
   const task = TASKS[sectionKey].tasks[idx];
@@ -403,6 +430,49 @@ document.getElementById("edit-save").addEventListener("click", () => {
   editTarget = null;
   persist();
 });
+
+// ===== Niqqud preview modal =====
+function askNiqqud(original) {
+  return new Promise(async (resolve) => {
+    const modal = document.getElementById("niqqud-modal");
+    const origEl = document.getElementById("niqqud-original");
+    const resultEl = document.getElementById("niqqud-result");
+    const errEl = document.getElementById("niqqud-error");
+    const cancelBtn = document.getElementById("niqqud-cancel");
+    const confirmBtn = document.getElementById("niqqud-confirm");
+
+    origEl.textContent = original;
+    errEl.classList.add("hidden");
+    resultEl.disabled = true;
+    resultEl.value = "⏳ מוסיף ניקוד…";
+    modal.classList.remove("hidden");
+
+    try {
+      const vocalized = await nakdanText(original);
+      resultEl.value = vocalized;
+    } catch (e) {
+      resultEl.value = original;
+      errEl.textContent = "⚠️ שירות הניקוד לא זמין. הוסף ניקוד ידנית או שמור בלי.";
+      errEl.classList.remove("hidden");
+    }
+    resultEl.disabled = false;
+    resultEl.focus();
+    resultEl.select();
+
+    const cleanup = () => {
+      modal.classList.add("hidden");
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      resultEl.onkeydown = null;
+    };
+    confirmBtn.onclick = () => { const v = resultEl.value.trim(); cleanup(); resolve(v || null); };
+    cancelBtn.onclick = () => { cleanup(); resolve(null); };
+    resultEl.onkeydown = (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); confirmBtn.click(); }
+      else if (ev.key === "Escape") { ev.preventDefault(); cancelBtn.click(); }
+    };
+  });
+}
 
 // ===== Force-refresh kids' UI =====
 document.getElementById("force-refresh-btn").addEventListener("click", () => {
