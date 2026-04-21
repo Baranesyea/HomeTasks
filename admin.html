@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="tasks.js?v=14"></script>
+<script src="tasks.js?v=15"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
@@ -71,6 +71,28 @@
       </div>
       <div id="status-line" class="hidden mt-2 text-xs text-emerald-700 font-bold"></div>
     </div>
+
+    <!-- Morning schedule (powers the countdown bar on the kids' page) -->
+    <section class="bg-white rounded-2xl shadow p-4 mb-4">
+      <div class="flex items-center gap-2 mb-3">
+        <div class="text-2xl">⏰</div>
+        <h3 class="font-bold text-lg text-slate-900">זמני בוקר (בר הספירה-לאחור)</h3>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">שעת התחלה</label>
+          <input id="sched-start" type="time" class="w-full p-2 border border-slate-300 rounded-lg text-lg" dir="ltr" />
+        </div>
+        <div>
+          <label class="block text-sm font-bold text-slate-700 mb-1">שעת יציאה לבית הספר</label>
+          <input id="sched-end" type="time" class="w-full p-2 border border-slate-300 rounded-lg text-lg" dir="ltr" />
+        </div>
+      </div>
+      <div class="flex items-center gap-3 mt-3">
+        <button id="sched-save" class="bg-emerald-600 text-white font-bold px-4 py-2 rounded-lg">שמור זמנים</button>
+        <span id="sched-status" class="text-xs text-slate-500">ברירת מחדל: 06:45 → 07:35. הבר נצבע אפור→כתום→אדום לפי התקדמות הזמן.</span>
+      </div>
+    </section>
 
     <!-- Cloud sync settings -->
     <details id="cloud-panel" class="bg-white rounded-2xl shadow p-4 mb-4">
@@ -207,7 +229,7 @@ function renderAdmin() {
   const root = document.getElementById("sections-admin");
   root.innerHTML = "";
 
-  for (const sectionKey of Object.keys(TASKS)) {
+  for (const sectionKey of sectionKeys(TASKS)) {
     const section = TASKS[sectionKey];
     const card = document.createElement("section");
     card.className = "bg-white rounded-2xl shadow p-4 mb-4";
@@ -325,7 +347,7 @@ function renderAdmin() {
 // After a drag, rebuild TASKS from the new DOM order, then persist
 function rebuildFromDom() {
   const newTasks = {};
-  for (const sectionKey of Object.keys(TASKS)) {
+  for (const sectionKey of sectionKeys(TASKS)) {
     newTasks[sectionKey] = { ...TASKS[sectionKey], tasks: [] };
   }
   document.querySelectorAll("[data-section-list]").forEach(list => {
@@ -392,7 +414,7 @@ function openEditModal(sectionKey, idx) {
   document.getElementById("edit-type").value = task.type;
   const sel = document.getElementById("edit-section");
   sel.innerHTML = "";
-  for (const sk of Object.keys(TASKS)) {
+  for (const sk of sectionKeys(TASKS)) {
     const opt = document.createElement("option");
     opt.value = sk;
     opt.textContent = TASKS[sk].title;
@@ -483,10 +505,36 @@ document.getElementById("force-refresh-btn").addEventListener("click", () => {
   flashStatus("🔄 נשלח רענון לכל ממשק הילדים הפתוח");
 });
 
+// ===== Schedule (morning countdown) =====
+function loadScheduleInputs() {
+  const s = getSchedule(TASKS);
+  document.getElementById("sched-start").value = s.start;
+  document.getElementById("sched-end").value = s.end;
+}
+document.getElementById("sched-save").addEventListener("click", async () => {
+  const start = document.getElementById("sched-start").value;
+  const end = document.getElementById("sched-end").value;
+  const status = document.getElementById("sched-status");
+  if (!start || !end) {
+    status.textContent = "❌ יש למלא שעת התחלה וסיום";
+    status.className = "text-xs font-bold text-red-700";
+    return;
+  }
+  if (start >= end) {
+    status.textContent = "❌ שעת הסיום חייבת להיות אחרי ההתחלה";
+    status.className = "text-xs font-bold text-red-700";
+    return;
+  }
+  TASKS._schedule = { start, end };
+  await persist();
+  status.textContent = `✅ נשמר: ${start} → ${end}`;
+  status.className = "text-xs font-bold text-emerald-700";
+});
+
 // ===== Vocalize every existing unvocalized task =====
 document.getElementById("fix-niqqud-btn").addEventListener("click", async () => {
   const plain = [];
-  for (const sk of Object.keys(TASKS)) {
+  for (const sk of sectionKeys(TASKS)) {
     TASKS[sk].tasks.forEach((t, i) => {
       if (!hasNiqqud(t.name)) plain.push({ sk, i, name: t.name });
     });
@@ -627,13 +675,16 @@ function showApp() {
   document.getElementById("admin-app").classList.remove("hidden");
   TASKS = loadTasks();
   loadCloudInputs();
+  loadScheduleInputs();
   refreshSyncModeLine();
   // Pull once on login if cloud is configured
   if (hasGistConfig()) {
     fetchTasksFromGist().then(remote => {
       if (remote) {
         TASKS = remote;
+        if (!TASKS._schedule) TASKS._schedule = { ...DEFAULT_SCHEDULE };
         saveTasks(TASKS);
+        loadScheduleInputs();
         renderAdmin();
         setCloudStatus("☁️ נטען מהענן", true);
       } else {

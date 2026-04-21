@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=14"></script>
+<script src="tasks.js?v=15"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -78,6 +78,19 @@
     <div class="text-slate-700 mt-1">תִּהְיוּ גֵּאִים בְּעַצְמְכֶם 💪</div>
   </div>
 
+  <!-- Morning countdown: fills between schedule.start and schedule.end, color shifts gray→orange→red. -->
+  <div id="schedule-bar" class="hidden bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
+    <div class="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+      <div class="font-bold text-slate-900 text-base sm:text-lg">
+        יוֹצְאִים לְבֵית הַסֵּפֶר בְּ-<span id="schedule-end-time" class="font-black">07:35</span>
+      </div>
+      <div id="schedule-remaining" class="text-sm font-medium text-slate-600"></div>
+    </div>
+    <div class="w-full bg-slate-100 rounded-full h-4 sm:h-5 overflow-hidden">
+      <div id="schedule-fill" class="h-full rounded-full" style="width: 0%; background: #94a3b8; transition: width 600ms ease, background-color 600ms ease;"></div>
+    </div>
+  </div>
+
   <main id="sections"></main>
 </div>
 
@@ -94,7 +107,7 @@ let TASKS = loadTasks();
 
 function emptyChecked() {
   const out = {};
-  for (const k of Object.keys(TASKS)) {
+  for (const k of sectionKeys(TASKS)) {
     out[k] = { kids: {}, general: {} };
     KIDS.forEach(kid => out[k].kids[kid] = {});
   }
@@ -128,7 +141,7 @@ function render() {
   const root = document.getElementById("sections");
   root.innerHTML = "";
 
-  for (const sectionKey of Object.keys(TASKS)) {
+  for (const sectionKey of sectionKeys(TASKS)) {
     const section = TASKS[sectionKey];
     const data = assignments[sectionKey];
 
@@ -167,6 +180,7 @@ function render() {
     root.appendChild(sec);
   }
   updateBadges();
+  updateScheduleBar();
 }
 
 function buildColumn({ title, kid, scope, sectionKey, items }) {
@@ -201,10 +215,7 @@ function buildGeneralBar({ sectionKey, items }) {
   const head = document.createElement("div");
   head.className = "flex items-center justify-between mb-3";
   head.innerHTML = `
-    <div class="flex items-baseline gap-2">
-      <div class="font-black text-lg text-slate-900">${GENERAL_LABEL}</div>
-      <div class="text-xs sm:text-sm text-slate-500">מִי שֶׁיַּעֲשֶׂה</div>
-    </div>
+    <div class="font-black text-lg text-slate-900">${GENERAL_LABEL}</div>
     <div data-role="col-badge"></div>
   `;
   bar.appendChild(head);
@@ -300,7 +311,7 @@ function updateBadges() {
   const assignments = buildAssignments(TASKS, date);
   let allDone = true;
 
-  for (const sectionKey of Object.keys(TASKS)) {
+  for (const sectionKey of sectionKeys(TASKS)) {
     const sec = document.querySelector(`[data-section="${sectionKey}"]`);
     if (!sec) continue;
     const sectionDone = isSectionDone(sectionKey, assignments);
@@ -344,7 +355,7 @@ function updateBadges() {
   }
 
   const banner = document.getElementById("all-done");
-  if (allDone && Object.keys(TASKS).length > 0) {
+  if (allDone && sectionKeys(TASKS).length > 0) {
     if (banner.classList.contains("hidden")) {
       banner.classList.remove("hidden");
       fireConfetti();
@@ -523,6 +534,65 @@ refreshCloudSetupVisibility();
 
 render();
 setInterval(checkDateReset, 60_000);
+
+// ===== Morning schedule progress bar =====
+// Gray under 60% elapsed, orange 60-85%, red above 85%. Bar hidden outside
+// the morning window (start-2h until end+30min) so it doesn't clutter evenings.
+function parseHM(hm) {
+  const [h, m] = (hm || "00:00").split(":").map(Number);
+  return { h: h || 0, m: m || 0 };
+}
+function updateScheduleBar() {
+  const bar = document.getElementById("schedule-bar");
+  const fill = document.getElementById("schedule-fill");
+  const endLabel = document.getElementById("schedule-end-time");
+  const remaining = document.getElementById("schedule-remaining");
+  if (!bar || !fill) return;
+
+  const sched = getSchedule(TASKS);
+  endLabel.textContent = sched.end;
+
+  const now = new Date();
+  const s = parseHM(sched.start);
+  const e = parseHM(sched.end);
+  const start = new Date(now); start.setHours(s.h, s.m, 0, 0);
+  const end   = new Date(now); end.setHours(e.h, e.m, 0, 0);
+  const total = end - start;
+
+  // Show the bar only during the relevant morning window.
+  const showFrom = new Date(start); showFrom.setHours(showFrom.getHours() - 2);
+  const showUntil = new Date(end); showUntil.setMinutes(showUntil.getMinutes() + 30);
+  if (now < showFrom || now > showUntil || total <= 0) {
+    bar.classList.add("hidden");
+    return;
+  }
+  bar.classList.remove("hidden");
+
+  const elapsed = now - start;
+  const pct = Math.max(0, Math.min(100, (elapsed / total) * 100));
+
+  let color = "#94a3b8"; // slate-400 (gray)
+  if (pct >= 85) color = "#dc2626";       // red-600
+  else if (pct >= 60) color = "#f97316";  // orange-500
+  fill.style.width = pct + "%";
+  fill.style.background = color;
+
+  if (now < start) {
+    const minsToStart = Math.ceil((start - now) / 60000);
+    remaining.textContent = `מַתְחִילִים בְּעוֹד ${minsToStart} דַּקּוֹת`;
+    remaining.className = "text-sm font-medium text-slate-600";
+  } else if (now >= end) {
+    remaining.textContent = "⚠️ הִגִּיעַ זְמַן הַיְּצִיאָה!";
+    remaining.className = "text-sm font-bold text-red-700";
+  } else {
+    const minsLeft = Math.ceil((end - now) / 60000);
+    const cls = pct >= 85 ? "text-red-700" : pct >= 60 ? "text-orange-700" : "text-slate-600";
+    remaining.textContent = `נִשְׁאֲרוּ ${minsLeft} דַּקּוֹת`;
+    remaining.className = `text-sm font-bold ${cls}`;
+  }
+}
+updateScheduleBar();
+setInterval(updateScheduleBar, 15_000);
 
 // SW disabled — kill any existing registration so iPad always loads fresh code.
 // (sw.js is now a self-destruct that runs once and unregisters itself.)

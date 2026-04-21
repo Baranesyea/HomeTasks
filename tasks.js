@@ -4,11 +4,25 @@ const KIDS = ["שִׁיָּה", "מִיכָאֵל", "יַעַר", "דִּין"];
 const GENERAL_LABEL = "מְשִׂימוֹת כְּלָלִיּוֹת";
 const ADMIN_PASSWORD = "1234"; // change here if needed
 
+// Morning countdown defaults — wake-up → leaving for school.
+const DEFAULT_SCHEDULE = { start: "06:45", end: "07:35" };
+
+// Iterate real sections only — keys starting with "_" are metadata (e.g. _schedule).
+function sectionKeys(tasks) {
+  return Object.keys(tasks || {}).filter(k => !k.startsWith("_"));
+}
+function getSchedule(tasks) {
+  const s = tasks && tasks._schedule;
+  if (!s || !s.start || !s.end) return { ...DEFAULT_SCHEDULE };
+  return { start: s.start, end: s.end };
+}
+
 // Task types:
 //   singular   = יחידנית — אחד מהילדים, ברוטציה יומית, ללא כפילות באותו יום
 //   collective = קולקטיבית — כל ילד עושה לעצמו
 //   general    = כללית — בטור הכלליות, מי שיעשה
 const DEFAULT_TASKS = {
+  _schedule: { ...DEFAULT_SCHEDULE },
   morning: {
     title: "מְשִׂימוֹת בּוֹקֶר",
     icon: "🌅",
@@ -55,7 +69,12 @@ const TASKS_KEY = "hometasks_tasks_v3";
 function loadTasks() {
   try {
     const raw = localStorage.getItem(TASKS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // Backfill schedule for tasks saved before the schedule feature existed.
+      if (!parsed._schedule) parsed._schedule = { ...DEFAULT_SCHEDULE };
+      return parsed;
+    }
   } catch (e) {}
   return JSON.parse(JSON.stringify(DEFAULT_TASKS));
 }
@@ -257,7 +276,7 @@ function buildAssignments(tasks, date) {
 
   // Init structure + collect singular slots in deterministic order
   const singularSlots = [];
-  for (const sectionKey of Object.keys(tasks)) {
+  for (const sectionKey of sectionKeys(tasks)) {
     out[sectionKey] = { perKid: {}, general: [] };
     KIDS.forEach(k => out[sectionKey].perKid[k] = []);
     tasks[sectionKey].tasks.forEach((task, idx) => {
