@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-<script src="tasks.js?v=13"></script>
+<script src="tasks.js?v=14"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; }
@@ -61,6 +61,9 @@
         <div class="flex flex-wrap gap-2">
           <button id="force-refresh-btn" class="bg-blue-600 text-white font-bold text-sm px-4 py-2 rounded-lg shadow hover:bg-blue-700">
             🔄 רענן ממשק הילדים
+          </button>
+          <button id="fix-niqqud-btn" class="bg-amber-500 text-white font-bold text-sm px-3 py-2 rounded-lg shadow hover:bg-amber-600">
+            ✨ נקד משימות קיימות
           </button>
           <button id="reset-defaults" class="bg-slate-200 text-slate-800 text-sm px-3 py-2 rounded-lg">↺ שחזור ברירת מחדל</button>
           <button id="logout-btn" class="bg-slate-100 text-slate-700 text-sm px-3 py-2 rounded-lg">יציאה</button>
@@ -478,6 +481,39 @@ function askNiqqud(original) {
 document.getElementById("force-refresh-btn").addEventListener("click", () => {
   if (bc) bc.postMessage({ type: "force-reload" });
   flashStatus("🔄 נשלח רענון לכל ממשק הילדים הפתוח");
+});
+
+// ===== Vocalize every existing unvocalized task =====
+document.getElementById("fix-niqqud-btn").addEventListener("click", async () => {
+  const plain = [];
+  for (const sk of Object.keys(TASKS)) {
+    TASKS[sk].tasks.forEach((t, i) => {
+      if (!hasNiqqud(t.name)) plain.push({ sk, i, name: t.name });
+    });
+  }
+  if (plain.length === 0) { flashStatus("✅ לכל המשימות כבר יש ניקוד"); return; }
+  if (!confirm(`נמצאו ${plain.length} משימות ללא ניקוד.\nלנקד את כולן אוטומטית?`)) return;
+
+  const btn = document.getElementById("fix-niqqud-btn");
+  btn.disabled = true;
+  btn.classList.add("opacity-60");
+  let ok = 0, fail = 0;
+  for (let n = 0; n < plain.length; n++) {
+    const item = plain[n];
+    btn.textContent = `⏳ מנקד ${n + 1}/${plain.length}…`;
+    try {
+      const v = await nakdanText(item.name);
+      if (v && v.trim()) {
+        TASKS[item.sk].tasks[item.i].name = v;
+        ok++;
+      } else { fail++; }
+    } catch (e) { fail++; }
+  }
+  btn.textContent = "✨ נקד משימות קיימות";
+  btn.disabled = false;
+  btn.classList.remove("opacity-60");
+  await persist();
+  flashStatus(`✨ נוקדו ${ok} משימות${fail ? ` (${fail} נכשלו — נסה שוב)` : ""}`);
 });
 
 // ===== Reset & JSON =====

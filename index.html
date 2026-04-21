@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="tasks.js?v=13"></script>
+<script src="tasks.js?v=14"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap');
   html, body { font-family: 'Heebo', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -23,6 +23,12 @@
   .task-row input[type="checkbox"] { width: 30px; height: 30px; cursor: pointer; accent-color: #16a34a; flex-shrink: 0; }
   .task-row label { cursor: pointer; flex: 1; font-size: 1.1rem; line-height: 1.7; }
   .task-row.checked label { text-decoration: line-through; opacity: 0.45; }
+  /* General tasks rendered as compact tiles in a full-width bar below the kids row */
+  .tile { user-select: none; transition: background 150ms ease, border-color 150ms ease, opacity 150ms ease; }
+  .tile input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; accent-color: #16a34a; flex-shrink: 0; }
+  .tile-text { font-size: 0.95rem; line-height: 1.35; }
+  .tile.tile-checked { background: #dcfce7; border-color: #86efac; }
+  .tile.tile-checked .tile-text { text-decoration: line-through; opacity: 0.5; }
   .confetti-piece { position: fixed; width: 10px; height: 14px; top: -20px; opacity: 0.9; z-index: 9999; pointer-events: none; }
   @keyframes confettiFall { to { transform: translateY(110vh) rotate(720deg); opacity: 0; } }
   .badge-pop { animation: badgePop 500ms cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -142,48 +148,31 @@ function render() {
     `;
     sec.appendChild(header);
 
-    const hasGeneral = data.general.length > 0;
-    // When general has many tasks, make it span 2 grid cells so we can render
-    // its tasks in 2 inner columns — keeps section height matched to kid cards.
-    const WIDE_THRESHOLD = 6;
-    const generalWide = data.general.length > WIDE_THRESHOLD;
+    // Kids always get a clean 4-column grid — general is rendered as a
+    // full-width tile bar below so it no longer distorts column heights.
     const grid = document.createElement("div");
-    if (!hasGeneral) {
-      grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3";
-    } else if (generalWide) {
-      grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3";
-    } else {
-      grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3";
-    }
-
+    grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3";
     KIDS.forEach(kid => {
       grid.appendChild(buildColumn({
         title: kid, kid, scope: "kids", sectionKey,
         items: data.perKid[kid],
       }));
     });
+    sec.appendChild(grid);
 
-    if (hasGeneral) {
-      grid.appendChild(buildColumn({
-        title: GENERAL_LABEL, kid: null, scope: "general", sectionKey,
-        items: data.general, isGeneral: true, wide: generalWide,
-      }));
+    if (data.general.length > 0) {
+      sec.appendChild(buildGeneralBar({ sectionKey, items: data.general }));
     }
 
-    sec.appendChild(grid);
     root.appendChild(sec);
   }
   updateBadges();
 }
 
-function buildColumn({ title, kid, scope, sectionKey, items, isGeneral, wide }) {
+function buildColumn({ title, kid, scope, sectionKey, items }) {
   const card = document.createElement("div");
-  const classes = ["col-card rounded-2xl p-3 border-2 bg-white border-slate-300"];
-  if (isGeneral) classes.push("border-dashed");
-  if (wide) classes.push("lg:col-span-2");
-  card.className = classes.join(" ");
+  card.className = "col-card rounded-2xl p-3 border-2 bg-white border-slate-300";
   if (kid) card.dataset.kid = kid;
-  if (isGeneral) card.dataset.general = "1";
 
   const head = document.createElement("div");
   head.className = "flex items-center justify-between mb-2";
@@ -193,24 +182,63 @@ function buildColumn({ title, kid, scope, sectionKey, items, isGeneral, wide }) 
   `;
   card.appendChild(head);
 
-  // Wide columns flow tasks into 2 inner columns on lg screens — keeps height short.
-  const tasksWrap = document.createElement("div");
-  if (wide) tasksWrap.className = "lg:columns-2 lg:gap-x-4";
-  card.appendChild(tasksWrap);
-
   if (items.length === 0) {
     const none = document.createElement("div");
     none.className = "text-sm text-slate-400 italic py-2";
     none.textContent = "אֵין מְשִׂימוֹת מְיוּחָדוֹת 🎉";
-    tasksWrap.appendChild(none);
+    card.appendChild(none);
   } else {
-    items.forEach(taskName => {
-      const row = buildTaskRow(sectionKey, scope, kid, taskName);
-      if (wide) row.classList.add("break-inside-avoid");
-      tasksWrap.appendChild(row);
-    });
+    items.forEach(taskName => card.appendChild(buildTaskRow(sectionKey, scope, kid, taskName)));
   }
   return card;
+}
+
+function buildGeneralBar({ sectionKey, items }) {
+  const bar = document.createElement("div");
+  bar.className = "col-card mt-3 rounded-2xl p-3 sm:p-4 border-2 border-dashed bg-white border-slate-300";
+  bar.dataset.general = "1";
+
+  const head = document.createElement("div");
+  head.className = "flex items-center justify-between mb-3";
+  head.innerHTML = `
+    <div class="flex items-baseline gap-2">
+      <div class="font-black text-lg text-slate-900">${GENERAL_LABEL}</div>
+      <div class="text-xs sm:text-sm text-slate-500">מִי שֶׁיַּעֲשֶׂה</div>
+    </div>
+    <div data-role="col-badge"></div>
+  `;
+  bar.appendChild(head);
+
+  const tiles = document.createElement("div");
+  tiles.className = "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2";
+  items.forEach(taskName => tiles.appendChild(buildGeneralTile(sectionKey, taskName)));
+  bar.appendChild(tiles);
+  return bar;
+}
+
+function buildGeneralTile(sectionKey, taskName) {
+  const tile = document.createElement("label");
+  tile.className = "tile flex items-center gap-2 p-2 border border-slate-200 rounded-xl bg-slate-50 cursor-pointer";
+  const checked = isChecked(sectionKey, "general", null, taskName);
+  if (checked) tile.classList.add("tile-checked");
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = checked;
+  cb.addEventListener("change", () => {
+    if (!state.checked[sectionKey]) state.checked[sectionKey] = { kids: {}, general: {} };
+    state.checked[sectionKey].general[taskName] = cb.checked;
+    saveCheckedState(state);
+    tile.classList.toggle("tile-checked", cb.checked);
+    if (cb.checked) playPop();
+    updateBadges();
+  });
+  const span = document.createElement("span");
+  span.className = "tile-text flex-1";
+  span.textContent = taskName;
+  tile.appendChild(cb);
+  tile.appendChild(span);
+  return tile;
 }
 
 function buildTaskRow(sectionKey, scope, kid, taskName) {
